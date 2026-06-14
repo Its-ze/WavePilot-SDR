@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import argparse
 import math
-import wave
-from io import BytesIO
+import threading
 from pathlib import Path
 
-import numpy as np
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
@@ -35,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import __version__
+from .live_audio import stream_audio
 from .presets import PRESET_GROUPS
 from .radio import manager
 from .updater import UpdateError, apply_update, check_for_update, restart_application
@@ -64,6 +63,38 @@ class FunctionWorker(QRunnable):
         except Exception as exc:
             try:
                 self.signals.error.emit(self.tag, str(exc))
+            except RuntimeError:
+                pass
+        finally:
+            try:
+                self.signals.finished.emit(self)
+            except RuntimeError:
+                pass
+
+
+class AudioStreamWorker(QRunnable):
+    def __init__(self, settings):
+        super().__init__()
+        self.setAutoDelete(False)
+        self.settings = settings
+        self.stop_event = threading.Event()
+        self.signals = WorkerSignals()
+
+    def stop(self):
+        self.stop_event.set()
+
+    def run(self):
+        try:
+            stream_audio(
+                **self.settings,
+                stop_event=self.stop_event,
+                on_status=lambda payload: self.signals.result.emit("audio-status", payload),
+                on_spectrum=lambda payload: self.signals.result.emit("audio-spectrum", payload),
+            )
+            self.signals.result.emit("audio-stopped", {"stopped": True})
+        except Exception as exc:
+            try:
+                self.signals.error.emit("audio-stream", str(exc))
             except RuntimeError:
                 pass
         finally:
@@ -157,13 +188,18 @@ class WavePilotWindow(QMainWindow):
         self.resize(1320, 840)
         self.thread_pool = QThreadPool.globalInstance()
         self.spectrum_busy = False
-        self.audio_busy = False
         self.audio_running = False
+        self.audio_worker = None
+        self.pending_audio_restart = False
         self.running = True
         self.latest_update = None
         self.user_requested_update_check = False
         self.closing = False
         self.active_workers = []
+
+        self.audio_restart_timer = QTimer(self)
+        self.audio_restart_timer.setSingleShot(True)
+        self.audio_restart_timer.timeout.connect(self.restart_audio_stream)
 
         self.build_ui()
         self.apply_style()
@@ -225,12 +261,20 @@ class WavePilotWindow(QMainWindow):
             self.sample_rate.addItem(label, value)
         self.auto_gain = QCheckBox("Auto gain")
         self.auto_gain.setChecked(True)
+        self.mute_audio = QCheckBox("Mute")
+        self.mute_audio.setChecked(True)
         self.gain = QDoubleSpinBox()
         self.gain.setRange(0.0, 49.6)
         self.gain.setSingleStep(0.1)
         self.gain.setValue(28.0)
         self.gain.setEnabled(False)
         self.auto_gain.toggled.connect(self.gain.setDisabled)
+        self.freq.valueChanged.connect(self.receiver_settings_changed)
+        self.mode.currentTextChanged.connect(self.receiver_settings_changed)
+        self.sample_rate.currentIndexChanged.connect(self.receiver_settings_changed)
+        self.auto_gain.toggled.connect(self.receiver_settings_changed)
+        self.gain.valueChanged.connect(self.receiver_settings_changed)
+        self.mute_audio.toggled.connect(self.receiver_settings_changed)
         self.pause_button = QPushButton("Pause")
         self.pause_button.clicked.connect(self.toggle_running)
         self.listen_button = QPushButton("Listen Live")
@@ -248,6 +292,7 @@ class WavePilotWindow(QMainWindow):
             box.addWidget(widget)
             controls.addLayout(box)
         controls.addWidget(self.auto_gain)
+        controls.addWidget(self.mute_audio)
         controls.addWidget(self.pause_button)
         controls.addWidget(self.listen_button)
         controls.addWidget(self.scan_button)
@@ -379,19 +424,18 @@ class WavePilotWindow(QMainWindow):
     def on_worker_finished(self, job):
         if job in self.active_workers:
             self.active_workers.remove(job)
+        if job is self.audio_worker:
+            self.audio_worker = None
+            if self.pending_audio_restart and not self.closing:
+                self.pending_audio_restart = False
+                QTimer.singleShot(60, self.start_audio_stream)
 
     def shutdown_workers(self):
         self.closing = True
         self.running = False
-        self.audio_running = False
+        self.stop_audio_stream(update_state=False)
         if hasattr(self, "spectrum_timer"):
             self.spectrum_timer.stop()
-        try:
-            import sounddevice as sd
-
-            sd.stop()
-        except Exception:
-            pass
         self.thread_pool.waitForDone(9000)
 
     def radio_kwargs(self):
@@ -406,13 +450,15 @@ class WavePilotWindow(QMainWindow):
         self.worker("status", manager.status)
 
     def queue_spectrum(self):
-        if not self.running or self.spectrum_busy:
+        if not self.running or self.spectrum_busy or self.audio_running:
             return
         self.spectrum_busy = True
         kwargs = self.radio_kwargs()
         self.worker("spectrum", lambda: manager.get().spectrum(**kwargs, fft_size=2048))
 
     def queue_scan(self):
+        if self.audio_running:
+            self.stop_audio_stream(update_state=False)
         self.scan_button.setEnabled(False)
         self.state_label.setText("Scanning")
         group = PRESET_GROUPS[self.preset_tabs.currentIndex()]
@@ -442,11 +488,22 @@ class WavePilotWindow(QMainWindow):
         self.worker("update-apply", apply_update)
 
     def tune(self, mhz, mode):
+        was_listening = self.audio_running
+        if was_listening:
+            self.stop_audio_stream(update_state=False)
+            self.pending_audio_restart = True
         self.freq.setValue(float(mhz))
         self.mode.setCurrentText(mode)
         self.spectrum.bins = []
         self.state_label.setText("Tuned")
-        self.queue_spectrum()
+        if not was_listening:
+            self.queue_spectrum()
+
+    def receiver_settings_changed(self):
+        if self.audio_running:
+            self.audio_restart_timer.start(360)
+        elif self.running:
+            self.queue_spectrum()
 
     def toggle_running(self):
         self.running = not self.running
@@ -456,28 +513,72 @@ class WavePilotWindow(QMainWindow):
             self.queue_spectrum()
 
     def toggle_audio(self):
-        self.audio_running = not self.audio_running
-        self.listen_button.setText("Stop Audio" if self.audio_running else "Listen Live")
         if self.audio_running:
-            self.queue_audio()
-        else:
-            try:
-                import sounddevice as sd
-
-                sd.stop()
-            except Exception:
-                pass
-
-    def queue_audio(self):
-        if not self.audio_running or self.audio_busy:
+            self.stop_audio_stream()
             return
-        self.audio_busy = True
         kwargs = self.radio_kwargs()
-        mode = self.mode.currentText()
-        center_hz = kwargs["center_hz"]
-        gain = kwargs["gain_tenths_db"]
-        auto_gain = kwargs["auto_gain"]
-        self.worker("audio", lambda: play_audio(center_hz, mode, gain, auto_gain))
+        settings = {
+            "center_hz": kwargs["center_hz"],
+            "mode": self.mode.currentText(),
+            "gain_tenths_db": kwargs["gain_tenths_db"],
+            "auto_gain": kwargs["auto_gain"],
+            "muted": self.mute_audio.isChecked(),
+        }
+        self.start_audio_stream(settings)
+
+    def start_audio_stream(self, settings=None):
+        if self.closing:
+            return
+        if self.audio_worker is not None:
+            self.stop_audio_stream(update_state=False)
+            self.pending_audio_restart = True
+            return
+        if settings is None:
+            kwargs = self.radio_kwargs()
+            settings = {
+                "center_hz": kwargs["center_hz"],
+                "mode": self.mode.currentText(),
+                "gain_tenths_db": kwargs["gain_tenths_db"],
+                "auto_gain": kwargs["auto_gain"],
+                "muted": self.mute_audio.isChecked(),
+            }
+        self.audio_running = True
+        self.listen_button.setText("Stop Audio")
+        self.state_label.setText("Starting audio")
+        self.spectrum_busy = False
+        job = AudioStreamWorker(settings)
+        job.signals.result.connect(self.on_worker_result)
+        job.signals.error.connect(self.on_worker_error)
+        job.signals.finished.connect(self.on_worker_finished)
+        self.audio_worker = job
+        self.active_workers.append(job)
+        self.thread_pool.start(job)
+
+    def stop_audio_stream(self, update_state=True):
+        self.audio_restart_timer.stop()
+        self.pending_audio_restart = False
+        self.audio_running = False
+        self.listen_button.setText("Listen Live")
+        if self.audio_worker is not None:
+            self.audio_worker.stop()
+        if update_state and not self.closing:
+            self.state_label.setText("Live" if self.running else "Paused")
+
+    def restart_audio_stream(self):
+        if not self.audio_running:
+            return
+        self.state_label.setText("Retuning")
+        self.stop_audio_stream(update_state=False)
+        self.pending_audio_restart = True
+
+    def render_spectrum_payload(self, payload):
+        self.spectrum.set_payload(payload)
+        self.waterfall.add_bins(payload.get("bins", []))
+        self.scope_meta.setText(f"{payload['center_hz'] / 1_000_000:.3f} MHz center | {payload['sample_rate'] / 1_000_000:.3f} MS/s | {payload['snr_db']:.1f} dB SNR")
+        self.peak_label.setText(f"Peak {payload['peak_hz'] / 1_000_000:.3f} MHz")
+        self.strong_list.clear()
+        for peak in payload.get("peaks", [])[:8]:
+            self.strong_list.addItem(f"{peak['mhz']:.3f} MHz   {peak['snr']:.1f} dB")
 
     def on_worker_result(self, tag, payload):
         if self.closing:
@@ -487,13 +588,7 @@ class WavePilotWindow(QMainWindow):
             self.state_label.setText("Live" if payload.get("radio_available") else "Driver needed")
         elif tag == "spectrum":
             self.spectrum_busy = False
-            self.spectrum.set_payload(payload)
-            self.waterfall.add_bins(payload.get("bins", []))
-            self.scope_meta.setText(f"{payload['center_hz'] / 1_000_000:.3f} MHz center | {payload['sample_rate'] / 1_000_000:.3f} MS/s | {payload['snr_db']:.1f} dB SNR")
-            self.peak_label.setText(f"Peak {payload['peak_hz'] / 1_000_000:.3f} MHz")
-            self.strong_list.clear()
-            for peak in payload.get("peaks", [])[:8]:
-                self.strong_list.addItem(f"{peak['mhz']:.3f} MHz   {peak['snr']:.1f} dB")
+            self.render_spectrum_payload(payload)
             if self.running and not self.audio_running:
                 self.state_label.setText("Live")
         elif tag == "scan":
@@ -502,11 +597,20 @@ class WavePilotWindow(QMainWindow):
             for item in payload.get("results", []):
                 self.scan_list.addItem(f"{item['mhz']:.4f} MHz   {item['name']}   {item['snr_db']:.1f} dB")
             self.state_label.setText("Scan done")
-        elif tag == "audio":
-            self.audio_busy = False
+        elif tag == "audio-spectrum":
+            self.render_spectrum_payload(payload)
+        elif tag == "audio-status":
             if self.audio_running:
-                self.state_label.setText("Listening")
-                QTimer.singleShot(40, self.queue_audio)
+                self.state_label.setText("Real-time")
+                seconds = float(payload.get("seconds", 0.0))
+                audio_state = "Muted" if payload.get("muted") else "Audio"
+                self.scope_meta.setText(
+                    f"Real-time {audio_state.lower()} | {payload.get('mode', self.mode.currentText()).upper()} | "
+                    f"{payload.get('audio_rate', 48000) / 1000:.0f} kHz stream | {seconds:.1f}s"
+                )
+        elif tag == "audio-stopped":
+            if not self.audio_running and not self.pending_audio_restart:
+                self.state_label.setText("Live" if self.running else "Paused")
         elif tag == "update-check":
             self.check_update_button.setEnabled(True)
             self.latest_update = payload
@@ -530,11 +634,11 @@ class WavePilotWindow(QMainWindow):
             self.state_label.setText("Scan failed")
             self.scan_list.clear()
             self.scan_list.addItem(message)
-        elif tag == "audio":
-            self.audio_busy = False
-            self.state_label.setText("Audio wait")
-            if self.audio_running:
-                QTimer.singleShot(500, self.queue_audio)
+        elif tag == "audio-stream":
+            self.audio_running = False
+            self.listen_button.setText("Listen Live")
+            self.state_label.setText("Audio error")
+            self.scope_meta.setText(message)
         elif tag.startswith("update"):
             self.check_update_button.setEnabled(True)
             self.apply_update_button.setEnabled(False)
@@ -575,26 +679,6 @@ class WavePilotWindow(QMainWindow):
             QMessageBox.warning(self, "Restart failed", str(exc))
             return
         QApplication.instance().quit()
-
-
-def play_audio(center_hz, mode, gain_tenths_db, auto_gain):
-    import sounddevice as sd
-
-    wav_bytes = manager.get().audio_clip(
-        center_hz=center_hz,
-        mode=mode,
-        seconds=0.72,
-        gain_tenths_db=gain_tenths_db,
-        auto_gain=auto_gain,
-        squelch=True,
-    )
-    with wave.open(BytesIO(wav_bytes), "rb") as handle:
-        rate = handle.getframerate()
-        frames = handle.readframes(handle.getnframes())
-    audio = np.frombuffer(frames, dtype="<i2").astype(np.float32) / 32768.0
-    sd.play(audio, rate, blocking=True)
-    return {"played": True}
-
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Run WavePilot SDR desktop app")

@@ -1,11 +1,11 @@
 {
-  "latest_version": "0.2.1",
+  "latest_version": "0.2.2",
   "source_zip_url": "https://github.com/Its-ze/WavePilot-SDR/archive/refs/heads/main.zip",
   "release_page": "https://github.com/Its-ze/WavePilot-SDR",
   "commit": "main",
   "notes": [
-    "Adds the WavePilot brand mark and native app icon.",
-    "Desktop window, Windows shortcuts, Linux launcher, and Pages favicon now use the same icon.",
-    "Adds a branded desktop header with the WavePilot signal-scanner tagline."
+    "Replaces chunked Listen Live playback with a continuous real-time audio stream.",
+    "Feeds spectrum and waterfall from the active audio stream so the SDR is not read twice.",
+    "Adds a Mute control so real-time receive can run silently while still updating the spectrum."
   ]
 }
