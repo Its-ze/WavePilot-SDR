@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import math
 import threading
+import time
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Qt, Signal
@@ -22,6 +23,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QMainWindow,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -90,6 +92,7 @@ class AudioStreamWorker(QRunnable):
                 stop_event=self.stop_event,
                 on_status=lambda payload: self.signals.result.emit("audio-status", payload),
                 on_spectrum=lambda payload: self.signals.result.emit("audio-spectrum", payload),
+                on_transcript=lambda payload: self.signals.result.emit("transcript", payload),
             )
             self.signals.result.emit("audio-stopped", {"stopped": True})
         except Exception as exc:
@@ -263,6 +266,8 @@ class WavePilotWindow(QMainWindow):
         self.auto_gain.setChecked(True)
         self.mute_audio = QCheckBox("Mute")
         self.mute_audio.setChecked(True)
+        self.transcript_enabled = QCheckBox("Transcript")
+        self.transcript_enabled.setChecked(True)
         self.gain = QDoubleSpinBox()
         self.gain.setRange(0.0, 49.6)
         self.gain.setSingleStep(0.1)
@@ -275,6 +280,7 @@ class WavePilotWindow(QMainWindow):
         self.auto_gain.toggled.connect(self.receiver_settings_changed)
         self.gain.valueChanged.connect(self.receiver_settings_changed)
         self.mute_audio.toggled.connect(self.receiver_settings_changed)
+        self.transcript_enabled.toggled.connect(self.receiver_settings_changed)
         self.pause_button = QPushButton("Pause")
         self.pause_button.clicked.connect(self.toggle_running)
         self.listen_button = QPushButton("Listen Live")
@@ -293,6 +299,7 @@ class WavePilotWindow(QMainWindow):
             controls.addLayout(box)
         controls.addWidget(self.auto_gain)
         controls.addWidget(self.mute_audio)
+        controls.addWidget(self.transcript_enabled)
         controls.addWidget(self.pause_button)
         controls.addWidget(self.listen_button)
         controls.addWidget(self.scan_button)
@@ -328,10 +335,30 @@ class WavePilotWindow(QMainWindow):
         right_layout.setContentsMargins(0, 0, 0, 0)
         self.strong_list = QListWidget()
         self.scan_list = QListWidget()
+        transcript_header = QHBoxLayout()
+        transcript_label = QLabel("Live Transcript")
+        self.transcript_state = QLabel("Idle")
+        self.transcript_state.setObjectName("Muted")
+        self.clear_transcript_button = QPushButton("Clear")
+        self.clear_transcript_button.clicked.connect(self.clear_transcript)
+        transcript_header.addWidget(transcript_label, 1)
+        transcript_header.addWidget(self.transcript_state)
+        transcript_header.addWidget(self.clear_transcript_button)
+        self.transcript_partial = QLabel("Start Listen Live to transcribe analog speech.")
+        self.transcript_partial.setWordWrap(True)
+        self.transcript_partial.setObjectName("Muted")
+        self.transcript_log = QPlainTextEdit()
+        self.transcript_log.setObjectName("TranscriptLog")
+        self.transcript_log.setReadOnly(True)
+        self.transcript_log.setPlaceholderText("Transcript lines appear here when speech is detected.")
+        self.transcript_log.document().setMaximumBlockCount(240)
         right_layout.addWidget(QLabel("Strong Signals"))
         right_layout.addWidget(self.strong_list, 1)
         right_layout.addWidget(QLabel("Scan Results"))
         right_layout.addWidget(self.scan_list, 1)
+        right_layout.addLayout(transcript_header)
+        right_layout.addWidget(self.transcript_partial)
+        right_layout.addWidget(self.transcript_log, 1)
         splitter.addWidget(left)
         splitter.addWidget(right)
         splitter.setStretchFactor(0, 4)
@@ -380,7 +407,7 @@ class WavePilotWindow(QMainWindow):
             #PanelTitle { font-size: 15px; font-weight: 720; }
             #Pill, #PillMuted { border: 1px solid #313a3e; border-radius: 6px; padding: 7px 10px; background: #1c2225; min-width: 104px; }
             #PillMuted { color: #a7b0aa; }
-            #UpdatePanel, QGroupBox, QListWidget, QTabWidget::pane { border: 1px solid #313a3e; border-radius: 8px; background: #15191b; }
+            #UpdatePanel, QGroupBox, QListWidget, QPlainTextEdit, QTabWidget::pane { border: 1px solid #313a3e; border-radius: 8px; background: #15191b; }
             QGroupBox { margin-top: 10px; padding: 10px; font-weight: 700; }
             QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }
             QPushButton { border: 1px solid #313a3e; border-radius: 6px; background: #14191b; min-height: 34px; padding: 0 12px; }
@@ -388,6 +415,7 @@ class WavePilotWindow(QMainWindow):
             QPushButton:disabled { color: #717b75; border-color: #2e3639; }
             QLineEdit, QDoubleSpinBox, QSpinBox, QComboBox { border: 1px solid #313a3e; border-radius: 6px; background: #0f1315; min-height: 32px; padding: 2px 8px; }
             QListWidget::item { border-bottom: 1px solid #263035; padding: 7px; }
+            #TranscriptLog { padding: 8px; line-height: 1.35; }
             QTabBar::tab { background: #14191b; border: 1px solid #313a3e; border-bottom: 0; padding: 8px 12px; border-top-left-radius: 6px; border-top-right-radius: 6px; }
             QTabBar::tab:selected { color: #42e8d2; border-color: #42e8d2; }
             """
@@ -523,6 +551,7 @@ class WavePilotWindow(QMainWindow):
             "gain_tenths_db": kwargs["gain_tenths_db"],
             "auto_gain": kwargs["auto_gain"],
             "muted": self.mute_audio.isChecked(),
+            "transcript": self.transcript_enabled.isChecked(),
         }
         self.start_audio_stream(settings)
 
@@ -541,10 +570,14 @@ class WavePilotWindow(QMainWindow):
                 "gain_tenths_db": kwargs["gain_tenths_db"],
                 "auto_gain": kwargs["auto_gain"],
                 "muted": self.mute_audio.isChecked(),
+                "transcript": self.transcript_enabled.isChecked(),
             }
         self.audio_running = True
         self.listen_button.setText("Stop Audio")
         self.state_label.setText("Starting audio")
+        if settings.get("transcript"):
+            self.transcript_state.setText("Starting")
+            self.transcript_partial.setText("Loading transcript model.")
         self.spectrum_busy = False
         job = AudioStreamWorker(settings)
         job.signals.result.connect(self.on_worker_result)
@@ -561,6 +594,8 @@ class WavePilotWindow(QMainWindow):
         self.listen_button.setText("Listen Live")
         if self.audio_worker is not None:
             self.audio_worker.stop()
+        if not self.pending_audio_restart and not self.closing:
+            self.transcript_state.setText("Idle")
         if update_state and not self.closing:
             self.state_label.setText("Live" if self.running else "Paused")
 
@@ -611,6 +646,8 @@ class WavePilotWindow(QMainWindow):
         elif tag == "audio-stopped":
             if not self.audio_running and not self.pending_audio_restart:
                 self.state_label.setText("Live" if self.running else "Paused")
+        elif tag == "transcript":
+            self.handle_transcript(payload)
         elif tag == "update-check":
             self.check_update_button.setEnabled(True)
             self.latest_update = payload
@@ -648,6 +685,31 @@ class WavePilotWindow(QMainWindow):
             self.update_detail.setText(message)
         else:
             self.state_label.setText("Error")
+
+    def clear_transcript(self):
+        self.transcript_log.clear()
+        self.transcript_partial.setText("Transcript cleared.")
+
+    def handle_transcript(self, payload):
+        kind = payload.get("type")
+        text = (payload.get("text") or "").strip()
+        if kind == "status":
+            ok = bool(payload.get("ok"))
+            if payload.get("loading"):
+                self.transcript_state.setText("Loading")
+            else:
+                self.transcript_state.setText("Ready" if ok else "Model needed")
+            self.transcript_partial.setText(text or ("Transcript ready." if ok else "Transcript unavailable."))
+            if text:
+                self.transcript_log.appendPlainText(f"[{self.transcript_state.text()}] {text}")
+        elif kind == "partial":
+            self.transcript_state.setText("Hearing")
+            self.transcript_partial.setText(text)
+        elif kind == "final" and text:
+            self.transcript_state.setText("Transcript")
+            self.transcript_partial.setText("")
+            timestamp = time.strftime("%H:%M:%S", time.localtime(float(payload.get("time") or time.time())))
+            self.transcript_log.appendPlainText(f"{timestamp}  {text}")
 
     def render_update(self, payload):
         current = payload.get("current_version", __version__)

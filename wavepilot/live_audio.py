@@ -10,6 +10,7 @@ import numpy as np
 
 from .dsp import demodulate_audio, rf_score, should_squelch, spectrum_payload
 from .radio import manager
+from .transcript import LiveTranscriber, TranscriptUnavailable, transcript_status
 
 AUDIO_SAMPLE_RATE = 48_000
 
@@ -42,9 +43,11 @@ def stream_audio(
     auto_gain=True,
     muted=False,
     volume=1.0,
+    transcript=False,
     stop_event: threading.Event | None = None,
     on_status=None,
     on_spectrum=None,
+    on_transcript=None,
 ):
     """Stream demodulated audio directly to the system output device.
 
@@ -61,6 +64,38 @@ def stream_audio(
         import sounddevice as sd
     else:
         sd = None
+    transcriber_state = {"engine": None}
+    transcriber_lock = threading.Lock()
+    if transcript:
+        if on_transcript:
+            on_transcript({"type": "status", "ok": True, "loading": True, "text": "Loading transcript model.", **transcript_status()})
+
+        def load_transcriber():
+            try:
+                engine = LiveTranscriber()
+                if stop_event.is_set():
+                    return
+                with transcriber_lock:
+                    transcriber_state["engine"] = engine
+                if on_transcript:
+                    on_transcript(
+                        {
+                            "type": "status",
+                            "ok": True,
+                            "text": f"Transcript ready: {engine.model_dir.name}",
+                            **transcript_status(),
+                        }
+                    )
+            except TranscriptUnavailable as exc:
+                if on_transcript and not stop_event.is_set():
+                    on_transcript({"type": "status", "ok": False, "text": str(exc), **transcript_status()})
+            except Exception as exc:
+                if on_transcript and not stop_event.is_set():
+                    on_transcript({"type": "status", "ok": False, "text": f"Transcript failed: {exc}", **transcript_status()})
+
+        threading.Thread(target=load_transcriber, name="WavePilotTranscriptLoader", daemon=True).start()
+    elif on_transcript:
+        on_transcript({"type": "status", "ok": True, "text": "Transcript off.", **transcript_status()})
 
     sample_rate = receiver_sample_rate(mode)
     chunk_samples = receiver_chunk_samples(mode)
@@ -112,10 +147,18 @@ def stream_audio(
                 last_rf = rf_score(samples[: min(len(samples), 32768)])
 
             audio = demodulate_audio(samples, sample_rate, mode)
-            if should_squelch(audio, last_rf, mode):
+            squelched = should_squelch(audio, last_rf, mode)
+            if squelched:
                 audio = np.zeros_like(audio)
             else:
                 audio, gain_scale = _condition_audio(audio, gain_scale)
+
+            with transcriber_lock:
+                transcriber = transcriber_state["engine"]
+            if transcriber is not None and not squelched:
+                for event in transcriber.accept_audio(audio, AUDIO_SAMPLE_RATE):
+                    if on_transcript:
+                        on_transcript(event)
 
             if stream is not None and len(audio):
                 if volume != 1.0:
@@ -154,17 +197,23 @@ def stream_audio(
                 )
                 last_status = now
 
+    with transcriber_lock:
+        transcriber = transcriber_state["engine"]
+    if transcriber is not None and on_transcript:
+        for event in transcriber.finish():
+            on_transcript(event)
+
     if on_status:
         on_status(
             {
                 "state": "stopped",
                 "center_hz": int(center_hz),
-            "mode": mode,
-            "sample_rate": sample_rate,
-            "audio_rate": AUDIO_SAMPLE_RATE,
-            "muted": muted or volume <= 0,
-            "volume": volume,
-            "chunks": chunks,
-            "seconds": max(0.0, time.monotonic() - started),
-        }
+                "mode": mode,
+                "sample_rate": sample_rate,
+                "audio_rate": AUDIO_SAMPLE_RATE,
+                "muted": muted or volume <= 0,
+                "volume": volume,
+                "chunks": chunks,
+                "seconds": max(0.0, time.monotonic() - started),
+            }
         )

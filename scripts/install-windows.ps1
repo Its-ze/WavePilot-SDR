@@ -4,11 +4,14 @@ param(
     [switch]$Yes,
     [switch]$InstallDriver,
     [switch]$SkipDriverDlls,
+    [switch]$SkipTranscriptModel,
     [switch]$SkipZadig,
     [switch]$NoShortcut
 )
 
 $ErrorActionPreference = "Stop"
+$TranscriptModelName = "vosk-model-small-en-us-0.15"
+$TranscriptModelUrl = "https://alphacephei.com/vosk/models/$TranscriptModelName.zip"
 
 function Say($Message) {
     Write-Host "[WavePilot] $Message"
@@ -124,6 +127,39 @@ function Install-Zadig {
     Start-Process -FilePath $zadig -Verb RunAs
 }
 
+function Install-TranscriptModel($DestDir) {
+    if ($SkipTranscriptModel) {
+        Say "Skipped transcript model download."
+        return
+    }
+    $modelRoot = Join-Path $DestDir ".runtime\models"
+    $modelDir = Join-Path $modelRoot $TranscriptModelName
+    if (Test-Path -LiteralPath $modelDir) {
+        Say "Transcript model already installed at $modelDir"
+        return
+    }
+    if (-not (Confirm-Step "Download public Vosk small English transcript model (~41 MB)?")) {
+        Say "Skipped transcript model download."
+        return
+    }
+
+    New-Item -ItemType Directory -Force -Path $modelRoot | Out-Null
+    $temp = Join-Path ([IO.Path]::GetTempPath()) ("wavepilot-transcript-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Force -Path $temp | Out-Null
+    $zip = Join-Path $temp "$TranscriptModelName.zip"
+    Invoke-Download $TranscriptModelUrl $zip
+    Expand-Archive -LiteralPath $zip -DestinationPath $temp -Force
+
+    $extracted = Get-ChildItem -LiteralPath $temp -Directory -Recurse |
+        Where-Object { $_.Name -eq $TranscriptModelName } |
+        Select-Object -First 1
+    if (-not $extracted) {
+        throw "Downloaded transcript archive did not contain $TranscriptModelName"
+    }
+    Move-Item -LiteralPath $extracted.FullName -Destination $modelDir -Force
+    Say "Installed transcript model in $modelDir"
+}
+
 function Write-Launcher($DestDir) {
     $launcher = Join-Path $DestDir "Start-WavePilot.ps1"
     $content = @"
@@ -170,6 +206,7 @@ Say "Installing from $source"
 Copy-Source $source $InstallDir
 Install-PythonDeps $InstallDir
 Install-DriverDlls $InstallDir
+Install-TranscriptModel $InstallDir
 Install-Zadig
 $launcherPath = Write-Launcher $InstallDir
 Install-Shortcuts $launcherPath

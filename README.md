@@ -10,9 +10,10 @@ WavePilot SDR is a native, cross-platform RTL-SDR scanner and live listener for 
 - Preset groups for NOAA weather, airband, FM broadcast, marine, ham, FRS/GMRS, MURS/business, and data channels
 - Scan mode for strongest preset hits
 - Real-time Listen Live mode for continuous WFM, NFM, and AM audio, with an in-app mute toggle
+- Offline live transcript panel for analog speech channels when the Vosk model is installed
 - In-app update check, install, and restart flow
-- Windows installer that can download public RTL-SDR runtime DLLs and launch Zadig for WinUSB driver setup
-- Linux installer that can install `rtl-sdr` packages and udev access rules
+- Windows installer that can download public RTL-SDR runtime DLLs, the transcript model, and launch Zadig for WinUSB driver setup
+- Linux installer that can install `rtl-sdr` packages, transcript dependencies, the transcript model, and udev access rules
 
 ## Quick Install
 
@@ -68,6 +69,18 @@ https://its-ze.github.io/WavePilot-SDR/update.json
 
 When an update is available, WavePilot downloads the public GitHub source archive, refreshes managed app files, runs the Python dependency install step, and asks for a restart. In-app apply is disabled when running from a git checkout so development work is not overwritten.
 
+## Live Transcript
+
+WavePilot can transcribe analog speech from the same real-time audio stream used by Listen Live. The transcript is local/offline through Vosk and works best on clear WFM/NFM/AM voice signals. Encrypted, trunked, digital, or weak/noisy signals will not produce useful text.
+
+The installers can download the public Vosk small English model into:
+
+```text
+.runtime/models/vosk-model-small-en-us-0.15
+```
+
+Set `WAVEPILOT_VOSK_MODEL` to use a different local Vosk model folder.
+
 ## Source And Licenses
 
 WavePilot SDR is GPL-2.0-or-later so it remains compatible with the public RTL-SDR driver stack it uses at runtime.
@@ -82,6 +95,8 @@ Public dependency sources:
 - PySide: <https://doc.qt.io/qtforpython-6/>
 - SciPy: <https://scipy.org/>
 - sounddevice: <https://python-sounddevice.readthedocs.io/>
+- Vosk: <https://alphacephei.com/vosk/>
+- Vosk models: <https://alphacephei.com/vosk/models>
 
 ## Legal
 

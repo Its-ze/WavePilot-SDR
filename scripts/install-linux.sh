@@ -6,12 +6,16 @@ REPOSITORY="${REPOSITORY:-Its-ze/WavePilot-SDR}"
 YES=0
 NO_SYSTEM=0
 INSTALL_UDEV=0
+SKIP_TRANSCRIPT_MODEL=0
+TRANSCRIPT_MODEL_NAME="vosk-model-small-en-us-0.15"
+TRANSCRIPT_MODEL_URL="https://alphacephei.com/vosk/models/$TRANSCRIPT_MODEL_NAME.zip"
 
 for arg in "$@"; do
   case "$arg" in
     --yes|-y) YES=1 ;;
     --no-system) NO_SYSTEM=1 ;;
     --udev) INSTALL_UDEV=1 ;;
+    --skip-transcript-model) SKIP_TRANSCRIPT_MODEL=1 ;;
     --install-dir=*) INSTALL_DIR="${arg#*=}" ;;
     *) echo "Unknown argument: $arg" >&2; exit 2 ;;
   esac
@@ -108,6 +112,51 @@ RULES
   say "Unplug and replug the RTL-SDR after installing udev rules."
 }
 
+install_transcript_model() {
+  if [ "$SKIP_TRANSCRIPT_MODEL" = "1" ]; then
+    say "Skipping transcript model download."
+    return
+  fi
+
+  local model_root model_dir
+  model_root="$INSTALL_DIR/.runtime/models"
+  model_dir="$model_root/$TRANSCRIPT_MODEL_NAME"
+  if [ -d "$model_dir" ]; then
+    say "Transcript model already installed at $model_dir"
+    return
+  fi
+  if ! confirm "Download public Vosk small English transcript model (~41 MB)?"; then
+    say "Skipping transcript model download."
+    return
+  fi
+
+  mkdir -p "$model_root"
+  local temp zip
+  temp="$(mktemp -d)"
+  zip="$temp/$TRANSCRIPT_MODEL_NAME.zip"
+  curl -L "$TRANSCRIPT_MODEL_URL" -o "$zip"
+  python3 - "$zip" "$model_root" "$TRANSCRIPT_MODEL_NAME" <<'PY'
+import shutil
+import sys
+import zipfile
+from pathlib import Path
+
+archive = Path(sys.argv[1])
+model_root = Path(sys.argv[2])
+model_name = sys.argv[3]
+temp = archive.parent / "extract"
+zipfile.ZipFile(archive).extractall(temp)
+matches = [p for p in temp.rglob(model_name) if p.is_dir()]
+if not matches:
+    raise SystemExit(f"Downloaded transcript archive did not contain {model_name}")
+dest = model_root / model_name
+if dest.exists():
+    shutil.rmtree(dest)
+shutil.move(str(matches[0]), str(dest))
+PY
+  say "Installed transcript model in $model_dir"
+}
+
 install_launchers() {
   mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications" "$HOME/.local/share/icons/hicolor/512x512/apps"
   if [ -f "$INSTALL_DIR/wavepilot/assets/wavepilot-icon.png" ]; then
@@ -137,6 +186,7 @@ SRC="$(source_dir)"
 say "Installing from $SRC"
 copy_source "$SRC"
 install_python_deps
+install_transcript_model
 install_udev_rules
 install_launchers
 

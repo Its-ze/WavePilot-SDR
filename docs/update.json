@@ -1,11 +1,11 @@
 {
-  "latest_version": "0.2.2",
+  "latest_version": "0.2.3",
   "source_zip_url": "https://github.com/Its-ze/WavePilot-SDR/archive/refs/heads/main.zip",
   "release_page": "https://github.com/Its-ze/WavePilot-SDR",
   "commit": "main",
   "notes": [
-    "Replaces chunked Listen Live playback with a continuous real-time audio stream.",
-    "Feeds spectrum and waterfall from the active audio stream so the SDR is not read twice.",
-    "Adds a Mute control so real-time receive can run silently while still updating the spectrum."
+    "Adds an offline live transcript panel powered by the real-time audio stream.",
+    "Installer can download the public Vosk small English model for local speech recognition.",
+    "Update checks now surface the transcript release as WavePilot SDR 0.2.3."
   ]
 }
