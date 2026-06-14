@@ -1,11 +1,11 @@
 {
-  "latest_version": "0.2.4",
+  "latest_version": "0.2.5",
   "source_zip_url": "https://github.com/Its-ze/WavePilot-SDR/archive/refs/heads/main.zip",
   "release_page": "https://github.com/Its-ze/WavePilot-SDR",
   "commit": "main",
   "notes": [
-    "Preset channel selection can start Listen Live immediately.",
-    "Scan and strong-signal rows are now clickable tune-and-listen targets.",
-    "Listen Live now starts unmuted by default, with optional Mute and Squelch controls."
+    "Cleaner native desktop layout with grouped Receiver, Audio, and Actions controls.",
+    "Improved preset, signal, scan, and transcript panel spacing.",
+    "Startup now applies a reliable app font fallback for cleaner rendering."
   ]
 }

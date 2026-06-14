@@ -5,7 +5,7 @@ WavePilot SDR is a native, cross-platform RTL-SDR scanner and live listener for 
 ## Features
 
 - RTL-SDR receive path through `librtlsdr` / `rtlsdr.dll`
-- Native Qt desktop UI with live spectrum and waterfall
+- Native Qt desktop UI with grouped receiver, audio, and action controls plus live spectrum and waterfall
 - WavePilot app icon and brand treatment across desktop, shortcuts, launchers, and Pages
 - Preset groups for NOAA weather, airband, FM broadcast, marine, ham, FRS/GMRS, MURS/business, and data channels
 - Scan mode for strongest preset hits

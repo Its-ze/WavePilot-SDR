@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Qt, Signal
-from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -44,6 +44,36 @@ from .updater import UpdateError, apply_update, check_for_update, restart_applic
 ASSETS_ROOT = Path(__file__).resolve().parent / "assets"
 APP_ICON = ASSETS_ROOT / "wavepilot-icon.png"
 BRAND_TAGLINE = "Signal scanner + live RF receiver"
+PREFERRED_FONT_FAMILIES = ("Segoe UI", "Inter", "Noto Sans", "DejaVu Sans", "Arial")
+FONT_FILE_FALLBACKS = (
+    Path("C:/Windows/Fonts/segoeui.ttf"),
+    Path("C:/Windows/Fonts/arial.ttf"),
+    Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+    Path("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf"),
+    Path("/usr/share/fonts/TTF/DejaVuSans.ttf"),
+)
+
+
+def configure_app_font(app):
+    families = set(QFontDatabase.families())
+    for family in PREFERRED_FONT_FAMILIES:
+        if family in families:
+            app.setFont(QFont(family, 10))
+            return family
+
+    for font_path in FONT_FILE_FALLBACKS:
+        if not font_path.exists():
+            continue
+        font_id = QFontDatabase.addApplicationFont(str(font_path))
+        if font_id < 0:
+            continue
+        loaded_families = QFontDatabase.applicationFontFamilies(font_id)
+        if loaded_families:
+            app.setFont(QFont(loaded_families[0], 10))
+            return loaded_families[0]
+
+    app.setFont(QFont("Sans Serif", 10))
+    return app.font().family()
 
 
 class WorkerSignals(QObject):
@@ -244,26 +274,34 @@ class WavePilotWindow(QMainWindow):
         top.addLayout(title_box, 1)
         self.state_label = QLabel("Starting")
         self.state_label.setObjectName("Pill")
+        self.state_label.setAlignment(Qt.AlignCenter)
+        self.state_label.setFixedSize(126, 46)
         self.peak_label = QLabel("Peak -- MHz")
         self.peak_label.setObjectName("PillMuted")
+        self.peak_label.setAlignment(Qt.AlignCenter)
+        self.peak_label.setFixedSize(126, 46)
         self.update_button = QPushButton("Updates")
+        self.update_button.setMinimumWidth(84)
+        self.update_button.setFixedHeight(36)
         self.update_button.clicked.connect(self.toggle_update_panel)
-        top.addWidget(self.state_label)
-        top.addWidget(self.peak_label)
-        top.addWidget(self.update_button)
+        top.addWidget(self.state_label, 0, Qt.AlignTop)
+        top.addWidget(self.peak_label, 0, Qt.AlignTop)
+        top.addWidget(self.update_button, 0, Qt.AlignTop)
         layout.addLayout(top)
 
-        controls = QHBoxLayout()
         self.freq = QDoubleSpinBox()
         self.freq.setRange(24.0, 1766.0)
         self.freq.setDecimals(4)
         self.freq.setSingleStep(0.0125)
         self.freq.setValue(162.55)
+        self.freq.setMinimumWidth(150)
         self.mode = QComboBox()
         self.mode.addItems(["nfm", "wfm", "am"])
+        self.mode.setMinimumWidth(82)
         self.sample_rate = QComboBox()
         for label, value in [("1.024 MS/s", 1024000), ("1.536 MS/s", 1536000), ("2.048 MS/s", 2048000)]:
             self.sample_rate.addItem(label, value)
+        self.sample_rate.setMinimumWidth(132)
         self.auto_gain = QCheckBox("Auto gain")
         self.auto_gain.setChecked(True)
         self.mute_audio = QCheckBox("Mute")
@@ -279,6 +317,7 @@ class WavePilotWindow(QMainWindow):
         self.gain.setSingleStep(0.1)
         self.gain.setValue(28.0)
         self.gain.setEnabled(False)
+        self.gain.setMinimumWidth(104)
         self.auto_gain.toggled.connect(self.gain.setDisabled)
         self.freq.valueChanged.connect(self.receiver_settings_changed)
         self.mode.currentTextChanged.connect(self.receiver_settings_changed)
@@ -291,27 +330,53 @@ class WavePilotWindow(QMainWindow):
         self.pause_button = QPushButton("Pause")
         self.pause_button.clicked.connect(self.toggle_running)
         self.listen_button = QPushButton("Listen Live")
+        self.listen_button.setObjectName("PrimaryButton")
         self.listen_button.clicked.connect(self.toggle_audio)
         self.scan_button = QPushButton("Scan")
+        self.scan_button.setObjectName("SecondaryButton")
         self.scan_button.clicked.connect(self.queue_scan)
-        for label, widget in [
+
+        controls = QHBoxLayout()
+        controls.setSpacing(10)
+        receiver_box = QGroupBox("Receiver")
+        receiver_grid = QGridLayout(receiver_box)
+        receiver_grid.setHorizontalSpacing(10)
+        receiver_grid.setVerticalSpacing(6)
+        for column, (label, widget) in enumerate([
             ("Frequency MHz", self.freq),
             ("Mode", self.mode),
             ("Sample rate", self.sample_rate),
             ("Gain dB", self.gain),
-        ]:
-            box = QVBoxLayout()
-            box.addWidget(QLabel(label))
-            box.addWidget(widget)
-            controls.addLayout(box)
-        controls.addWidget(self.auto_gain)
-        controls.addWidget(self.auto_listen)
-        controls.addWidget(self.mute_audio)
-        controls.addWidget(self.squelch_audio)
-        controls.addWidget(self.transcript_enabled)
-        controls.addWidget(self.pause_button)
-        controls.addWidget(self.listen_button)
-        controls.addWidget(self.scan_button)
+        ]):
+            field_label = QLabel(label)
+            field_label.setObjectName("FieldLabel")
+            receiver_grid.addWidget(field_label, 0, column)
+            receiver_grid.addWidget(widget, 1, column)
+            receiver_grid.setColumnStretch(column, 1)
+        receiver_grid.addWidget(self.auto_gain, 2, 3)
+
+        audio_box = QGroupBox("Audio")
+        audio_grid = QGridLayout(audio_box)
+        audio_grid.setHorizontalSpacing(10)
+        audio_grid.setVerticalSpacing(8)
+        for index, option in enumerate([self.auto_listen, self.mute_audio, self.squelch_audio, self.transcript_enabled]):
+            audio_grid.addWidget(option, index // 2, index % 2)
+        audio_grid.setColumnStretch(0, 1)
+        audio_grid.setColumnStretch(1, 1)
+
+        action_box = QGroupBox("Actions")
+        action_grid = QGridLayout(action_box)
+        action_grid.setHorizontalSpacing(8)
+        action_grid.setVerticalSpacing(8)
+        self.listen_button.setMinimumWidth(132)
+        self.scan_button.setMinimumWidth(92)
+        self.pause_button.setMinimumWidth(92)
+        action_grid.addWidget(self.listen_button, 0, 0, 1, 2)
+        action_grid.addWidget(self.scan_button, 1, 0)
+        action_grid.addWidget(self.pause_button, 1, 1)
+        controls.addWidget(receiver_box, 5)
+        controls.addWidget(audio_box, 3)
+        controls.addWidget(action_box, 2)
         layout.addLayout(controls)
 
         self.update_panel = self.build_update_panel()
@@ -319,12 +384,16 @@ class WavePilotWindow(QMainWindow):
         layout.addWidget(self.update_panel)
 
         self.preset_tabs = QTabWidget()
+        self.preset_tabs.setDocumentMode(True)
+        self.preset_tabs.setUsesScrollButtons(True)
         layout.addWidget(self.preset_tabs)
 
         splitter = QSplitter(Qt.Horizontal)
+        splitter.setChildrenCollapsible(False)
         left = QWidget()
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(10)
         spectrum_box = QGroupBox("Live Spectrum")
         spectrum_layout = QVBoxLayout(spectrum_box)
         self.scope_meta = QLabel("Waiting for samples")
@@ -342,38 +411,45 @@ class WavePilotWindow(QMainWindow):
         right = QWidget()
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(10)
         self.strong_list = QListWidget()
         self.strong_list.itemClicked.connect(self.activate_channel_item)
         self.scan_list = QListWidget()
         self.scan_list.itemClicked.connect(self.activate_channel_item)
+        signals_box = QGroupBox("Strong Signals")
+        signals_layout = QVBoxLayout(signals_box)
+        signals_layout.addWidget(self.strong_list)
+        scan_box = QGroupBox("Scan Results")
+        scan_layout = QVBoxLayout(scan_box)
+        scan_layout.addWidget(self.scan_list)
+        transcript_box = QGroupBox("Live Transcript")
+        transcript_layout = QVBoxLayout(transcript_box)
         transcript_header = QHBoxLayout()
-        transcript_label = QLabel("Live Transcript")
         self.transcript_state = QLabel("Idle")
-        self.transcript_state.setObjectName("Muted")
+        self.transcript_state.setObjectName("InlinePill")
         self.clear_transcript_button = QPushButton("Clear")
         self.clear_transcript_button.clicked.connect(self.clear_transcript)
-        transcript_header.addWidget(transcript_label, 1)
-        transcript_header.addWidget(self.transcript_state)
+        transcript_header.addWidget(self.transcript_state, 1)
         transcript_header.addWidget(self.clear_transcript_button)
-        self.transcript_partial = QLabel("Start Listen Live to transcribe analog speech.")
+        self.transcript_partial = QLabel("Transcript idle.")
         self.transcript_partial.setWordWrap(True)
-        self.transcript_partial.setObjectName("Muted")
+        self.transcript_partial.setObjectName("TranscriptPartial")
         self.transcript_log = QPlainTextEdit()
         self.transcript_log.setObjectName("TranscriptLog")
         self.transcript_log.setReadOnly(True)
-        self.transcript_log.setPlaceholderText("Transcript lines appear here when speech is detected.")
+        self.transcript_log.setPlaceholderText("Transcript lines appear here.")
         self.transcript_log.document().setMaximumBlockCount(240)
-        right_layout.addWidget(QLabel("Strong Signals"))
-        right_layout.addWidget(self.strong_list, 1)
-        right_layout.addWidget(QLabel("Scan Results"))
-        right_layout.addWidget(self.scan_list, 1)
-        right_layout.addLayout(transcript_header)
-        right_layout.addWidget(self.transcript_partial)
-        right_layout.addWidget(self.transcript_log, 1)
+        transcript_layout.addLayout(transcript_header)
+        transcript_layout.addWidget(self.transcript_partial)
+        transcript_layout.addWidget(self.transcript_log, 1)
+        right_layout.addWidget(signals_box, 1)
+        right_layout.addWidget(scan_box, 1)
+        right_layout.addWidget(transcript_box, 2)
         splitter.addWidget(left)
         splitter.addWidget(right)
         splitter.setStretchFactor(0, 4)
         splitter.setStretchFactor(1, 1)
+        splitter.setSizes([980, 330])
         layout.addWidget(splitter, 1)
 
         self.setCentralWidget(root)
@@ -410,22 +486,33 @@ class WavePilotWindow(QMainWindow):
     def apply_style(self):
         self.setStyleSheet(
             """
-            QMainWindow, QWidget { background: #0b0d0f; color: #f3f7f2; font-family: Segoe UI, Arial; font-size: 13px; }
-            #Title { font-size: 31px; font-weight: 780; color: #f3f7f2; }
-            #Tagline { color: #42e8d2; font-size: 12px; font-weight: 720; letter-spacing: 1px; text-transform: uppercase; }
+            QMainWindow, QWidget { background: #0b0d0f; color: #f3f7f2; font-size: 13px; }
+            QLabel { background: transparent; }
+            #Title { font-size: 30px; font-weight: 760; color: #f3f7f2; }
+            #Tagline { color: #42e8d2; font-size: 12px; font-weight: 720; letter-spacing: 0; text-transform: uppercase; }
             #Muted { color: #a7b0aa; }
             #BrandIcon { border: 1px solid #313a3e; border-radius: 10px; background: #0f1315; padding: 2px; }
+            #FieldLabel { color: #a7b0aa; font-size: 12px; }
             #PanelTitle { font-size: 15px; font-weight: 720; }
             #Pill, #PillMuted { border: 1px solid #313a3e; border-radius: 6px; padding: 7px 10px; background: #1c2225; min-width: 104px; }
             #PillMuted { color: #a7b0aa; }
+            #InlinePill { border: 1px solid #313a3e; border-radius: 6px; padding: 5px 8px; background: #101416; color: #a7b0aa; }
             #UpdatePanel, QGroupBox, QListWidget, QPlainTextEdit, QTabWidget::pane { border: 1px solid #313a3e; border-radius: 8px; background: #15191b; }
-            QGroupBox { margin-top: 10px; padding: 10px; font-weight: 700; }
-            QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }
+            QGroupBox { margin-top: 12px; padding: 12px 10px 10px 10px; font-weight: 400; }
+            QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; color: #d9e4df; font-weight: 720; }
+            QCheckBox { background: transparent; min-height: 24px; spacing: 6px; }
+            QCheckBox::indicator { width: 14px; height: 14px; }
             QPushButton { border: 1px solid #313a3e; border-radius: 6px; background: #14191b; min-height: 34px; padding: 0 12px; }
             QPushButton:hover, QPushButton:checked { border-color: #42e8d2; color: #42e8d2; }
             QPushButton:disabled { color: #717b75; border-color: #2e3639; }
+            QPushButton#PrimaryButton { background: #12302e; border-color: #42e8d2; color: #f3f7f2; font-weight: 720; }
+            QPushButton#PrimaryButton:hover { background: #163a37; }
+            QPushButton#SecondaryButton { font-weight: 680; }
+            QPushButton#PresetButton { min-height: 52px; padding: 4px 8px; }
             QLineEdit, QDoubleSpinBox, QSpinBox, QComboBox { border: 1px solid #313a3e; border-radius: 6px; background: #0f1315; min-height: 32px; padding: 2px 8px; }
             QListWidget::item { border-bottom: 1px solid #263035; padding: 7px; }
+            QListWidget::item:selected { background: #12302e; color: #f3f7f2; }
+            #TranscriptPartial { color: #a7b0aa; padding: 2px 0 4px 0; }
             #TranscriptLog { padding: 8px; line-height: 1.35; }
             QTabBar::tab { background: #14191b; border: 1px solid #313a3e; border-bottom: 0; padding: 8px 12px; border-top-left-radius: 6px; border-top-right-radius: 6px; }
             QTabBar::tab:selected { color: #42e8d2; border-color: #42e8d2; }
@@ -436,13 +523,19 @@ class WavePilotWindow(QMainWindow):
         for group in PRESET_GROUPS:
             page = QWidget()
             outer = QVBoxLayout(page)
+            outer.setContentsMargins(0, 0, 0, 0)
+            outer.setSpacing(0)
             scroll = QScrollArea()
+            scroll.setFrameShape(QFrame.NoFrame)
             scroll.setWidgetResizable(True)
             inner = QWidget()
             grid = QGridLayout(inner)
             grid.setSpacing(8)
+            grid.setContentsMargins(10, 10, 10, 10)
             for idx, channel in enumerate(group["channels"]):
                 button = QPushButton(f"{channel['name']}\n{channel['mhz']:.4f} MHz")
+                button.setObjectName("PresetButton")
+                button.setMinimumHeight(52)
                 button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
                 button.clicked.connect(
                     lambda checked=False, ch=channel, mode=group["mode"]: self.tune(
@@ -795,6 +888,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Run WavePilot SDR desktop app")
     parser.parse_args(argv)
     app = QApplication([])
+    configure_app_font(app)
     if APP_ICON.exists():
         app.setWindowIcon(QIcon(str(APP_ICON)))
     window = WavePilotWindow()
