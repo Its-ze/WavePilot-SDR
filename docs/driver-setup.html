@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WavePilot SDR Driver Setup</title>
+  <style>
+    :root {
+      --page: #0a0d10;
+      --ink: #f4f7f2;
+      --muted: #aab4af;
+      --panel: #151a1d;
+      --line: #303a40;
+      --cyan: #42e8d2;
+      --green: #98e86b;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--ink);
+      font-family: "Segoe UI", system-ui, sans-serif;
+      letter-spacing: 0;
+    }
+
+    main {
+      width: min(980px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 34px 0 48px;
+    }
+
+    a {
+      color: var(--cyan);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 42px;
+      line-height: 1;
+    }
+
+    h2 {
+      margin: 28px 0 12px;
+      font-size: 22px;
+    }
+
+    p,
+    li {
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 16px;
+      margin-top: 14px;
+    }
+
+    pre {
+      overflow-x: auto;
+      border: 1px solid #293238;
+      border-radius: 6px;
+      background: #090d10;
+      padding: 12px;
+      color: var(--green);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <a href="index.html">Back to WavePilot SDR</a>
+    <h1>Driver Setup</h1>
+    <p>WavePilot SDR can install the app without administrator rights. USB driver binding still needs your approval because it changes how Windows or Linux exposes the SDR dongle.</p>
+
+    <section class="panel">
+      <h2>Windows</h2>
+      <pre><code>.\scripts\install-windows.ps1 -InstallDriver</code></pre>
+      <ol>
+        <li>Approve the Zadig administrator prompt.</li>
+        <li>Open Options and enable List All Devices.</li>
+        <li>Select RTL2838UHIDIR, Bulk-In Interface 0, or the matching Realtek RTL-SDR entry.</li>
+        <li>Choose WinUSB.</li>
+        <li>Install or replace the driver, then unplug and replug the dongle.</li>
+      </ol>
+      <p>The runtime DLLs come from public RTL-SDR Blog Windows releases. Zadig comes from public libwdi/Zadig releases.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Linux</h2>
+      <pre><code>./scripts/install-linux.sh --udev</code></pre>
+      <p>The installer can add udev rules for common Realtek RTL-SDR devices and install distro packages such as rtl-sdr and librtlsdr. Unplug and replug the dongle after the udev step.</p>
+    </section>
+  </main>
+</body>
+</html>

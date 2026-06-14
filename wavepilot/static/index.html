@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WavePilot SDR</title>
+  <link rel="icon" href="static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="static/styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark" aria-hidden="true"></div>
+        <div>
+          <h1>WavePilot SDR</h1>
+          <p id="deviceLine">Checking receiver</p>
+        </div>
+      </div>
+      <div class="status-stack" aria-live="polite">
+        <span id="runState" class="pill">Starting</span>
+        <span id="peakState" class="pill quiet">Peak -- MHz</span>
+      </div>
+    </header>
+
+    <section class="toolbar" aria-label="receiver controls">
+      <label class="field">
+        <span>Frequency</span>
+        <div class="frequency-box">
+          <input id="centerMhz" type="number" min="24" max="1766" step="0.0005" value="162.55">
+          <span>MHz</span>
+        </div>
+      </label>
+      <label class="field">
+        <span>Mode</span>
+        <select id="modeSelect">
+          <option value="nfm">NFM voice</option>
+          <option value="wfm">Wide FM</option>
+          <option value="am">AM</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Sample rate</span>
+        <select id="sampleRate">
+          <option value="1024000">1.024 MS/s</option>
+          <option value="1536000">1.536 MS/s</option>
+          <option value="2048000">2.048 MS/s</option>
+        </select>
+      </label>
+      <label class="toggle">
+        <input id="autoGain" type="checkbox" checked>
+        <span>Auto gain</span>
+      </label>
+      <label class="field compact">
+        <span>Gain</span>
+        <input id="gainDb" type="number" min="0" max="49.6" step="0.1" value="28.0" disabled>
+      </label>
+      <button id="pauseButton" type="button" class="icon-button" title="Pause spectrum" aria-label="Pause spectrum">
+        <span id="pauseGlyph">Pause</span>
+      </button>
+      <button id="listenButton" type="button" class="primary-button">Listen Live</button>
+      <button id="scanButton" type="button" class="secondary-button">Scan</button>
+    </section>
+
+    <section class="preset-band" aria-label="preset channels">
+      <div class="preset-tabs" id="presetTabs"></div>
+      <div class="preset-grid" id="presetGrid"></div>
+    </section>
+
+    <section class="main-grid">
+      <section class="spectrum-panel">
+        <div class="panel-head">
+          <div>
+            <h2>Live Spectrum</h2>
+            <p id="scopeMeta">Waiting for samples</p>
+          </div>
+          <strong id="snrReadout">-- dB</strong>
+        </div>
+        <canvas id="spectrum" width="1040" height="330"></canvas>
+      </section>
+
+      <aside class="side-panel">
+        <div class="panel-head tight">
+          <h2>Strong Signals</h2>
+        </div>
+        <ol id="peakList" class="signal-list"></ol>
+      </aside>
+
+      <section class="waterfall-panel">
+        <div class="panel-head tight">
+          <h2>Waterfall</h2>
+          <span id="waterfallMeta">512 bins</span>
+        </div>
+        <canvas id="waterfall" width="1040" height="360"></canvas>
+      </section>
+
+      <aside class="side-panel scan-panel">
+        <div class="panel-head tight">
+          <h2>Scan Results</h2>
+          <select id="scanGroup" aria-label="Scan group"></select>
+        </div>
+        <ol id="scanList" class="signal-list"></ol>
+      </aside>
+    </section>
+  </main>
+
+  <script src="static/app.js"></script>
+</body>
+</html>
