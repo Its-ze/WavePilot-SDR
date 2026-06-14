@@ -43,6 +43,7 @@ def stream_audio(
     auto_gain=True,
     muted=False,
     volume=1.0,
+    squelch=False,
     transcript=False,
     stop_event: threading.Event | None = None,
     on_status=None,
@@ -60,6 +61,7 @@ def stream_audio(
         raise ValueError(f"unsupported mode: {mode}")
     muted = bool(muted)
     volume = max(0.0, min(1.5, float(volume)))
+    squelch = bool(squelch)
     if not muted and volume > 0:
         import sounddevice as sd
     else:
@@ -133,6 +135,7 @@ def stream_audio(
                     "audio_rate": AUDIO_SAMPLE_RATE,
                     "muted": muted or volume <= 0,
                     "volume": volume,
+                    "squelch": squelch,
                     "chunks": chunks,
                     "seconds": 0.0,
                 }
@@ -147,15 +150,15 @@ def stream_audio(
                 last_rf = rf_score(samples[: min(len(samples), 32768)])
 
             audio = demodulate_audio(samples, sample_rate, mode)
-            squelched = should_squelch(audio, last_rf, mode)
-            if squelched:
+            rf_squelched = should_squelch(audio, last_rf, mode)
+            if squelch and rf_squelched:
                 audio = np.zeros_like(audio)
             else:
                 audio, gain_scale = _condition_audio(audio, gain_scale)
 
             with transcriber_lock:
                 transcriber = transcriber_state["engine"]
-            if transcriber is not None and not squelched:
+            if transcriber is not None and not rf_squelched:
                 for event in transcriber.accept_audio(audio, AUDIO_SAMPLE_RATE):
                     if on_transcript:
                         on_transcript(event)
@@ -191,6 +194,7 @@ def stream_audio(
                         "audio_rate": AUDIO_SAMPLE_RATE,
                         "muted": muted or volume <= 0,
                         "volume": volume,
+                        "squelch": squelch,
                         "chunks": chunks,
                         "seconds": max(0.0, now - started),
                     }
@@ -213,6 +217,7 @@ def stream_audio(
                 "audio_rate": AUDIO_SAMPLE_RATE,
                 "muted": muted or volume <= 0,
                 "volume": volume,
+                "squelch": squelch,
                 "chunks": chunks,
                 "seconds": max(0.0, time.monotonic() - started),
             }

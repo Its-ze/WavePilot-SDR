@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QPlainTextEdit,
@@ -194,6 +195,7 @@ class WavePilotWindow(QMainWindow):
         self.audio_running = False
         self.audio_worker = None
         self.pending_audio_restart = False
+        self.suppress_receiver_change = False
         self.running = True
         self.latest_update = None
         self.user_requested_update_check = False
@@ -265,7 +267,11 @@ class WavePilotWindow(QMainWindow):
         self.auto_gain = QCheckBox("Auto gain")
         self.auto_gain.setChecked(True)
         self.mute_audio = QCheckBox("Mute")
-        self.mute_audio.setChecked(True)
+        self.mute_audio.setChecked(False)
+        self.auto_listen = QCheckBox("Auto listen")
+        self.auto_listen.setChecked(True)
+        self.squelch_audio = QCheckBox("Squelch")
+        self.squelch_audio.setChecked(False)
         self.transcript_enabled = QCheckBox("Transcript")
         self.transcript_enabled.setChecked(True)
         self.gain = QDoubleSpinBox()
@@ -280,6 +286,7 @@ class WavePilotWindow(QMainWindow):
         self.auto_gain.toggled.connect(self.receiver_settings_changed)
         self.gain.valueChanged.connect(self.receiver_settings_changed)
         self.mute_audio.toggled.connect(self.receiver_settings_changed)
+        self.squelch_audio.toggled.connect(self.receiver_settings_changed)
         self.transcript_enabled.toggled.connect(self.receiver_settings_changed)
         self.pause_button = QPushButton("Pause")
         self.pause_button.clicked.connect(self.toggle_running)
@@ -298,7 +305,9 @@ class WavePilotWindow(QMainWindow):
             box.addWidget(widget)
             controls.addLayout(box)
         controls.addWidget(self.auto_gain)
+        controls.addWidget(self.auto_listen)
         controls.addWidget(self.mute_audio)
+        controls.addWidget(self.squelch_audio)
         controls.addWidget(self.transcript_enabled)
         controls.addWidget(self.pause_button)
         controls.addWidget(self.listen_button)
@@ -334,7 +343,9 @@ class WavePilotWindow(QMainWindow):
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
         self.strong_list = QListWidget()
+        self.strong_list.itemClicked.connect(self.activate_channel_item)
         self.scan_list = QListWidget()
+        self.scan_list.itemClicked.connect(self.activate_channel_item)
         transcript_header = QHBoxLayout()
         transcript_label = QLabel("Live Transcript")
         self.transcript_state = QLabel("Idle")
@@ -433,7 +444,13 @@ class WavePilotWindow(QMainWindow):
             for idx, channel in enumerate(group["channels"]):
                 button = QPushButton(f"{channel['name']}\n{channel['mhz']:.4f} MHz")
                 button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                button.clicked.connect(lambda checked=False, ch=channel, mode=group["mode"]: self.tune(ch["mhz"], mode))
+                button.clicked.connect(
+                    lambda checked=False, ch=channel, mode=group["mode"]: self.tune(
+                        ch["mhz"],
+                        mode,
+                        start_audio=self.auto_listen.isChecked(),
+                    )
+                )
                 grid.addWidget(button, idx // 6, idx % 6)
             scroll.setWidget(inner)
             outer.addWidget(scroll)
@@ -515,19 +532,28 @@ class WavePilotWindow(QMainWindow):
         self.update_detail.setText("Downloading and installing the published WavePilot SDR update.")
         self.worker("update-apply", apply_update)
 
-    def tune(self, mhz, mode):
+    def tune(self, mhz, mode, start_audio=False):
         was_listening = self.audio_running
         if was_listening:
             self.stop_audio_stream(update_state=False)
             self.pending_audio_restart = True
-        self.freq.setValue(float(mhz))
-        self.mode.setCurrentText(mode)
+        self.suppress_receiver_change = True
+        try:
+            self.freq.setValue(float(mhz))
+            self.mode.setCurrentText(mode)
+        finally:
+            self.suppress_receiver_change = False
         self.spectrum.bins = []
-        self.state_label.setText("Tuned")
+        self.state_label.setText("Listening" if start_audio or was_listening else "Tuned")
         if not was_listening:
-            self.queue_spectrum()
+            if start_audio:
+                QTimer.singleShot(80, self.start_audio_stream)
+            else:
+                self.queue_spectrum()
 
     def receiver_settings_changed(self):
+        if self.suppress_receiver_change:
+            return
         if self.audio_running:
             self.audio_restart_timer.start(360)
         elif self.running:
@@ -551,6 +577,7 @@ class WavePilotWindow(QMainWindow):
             "gain_tenths_db": kwargs["gain_tenths_db"],
             "auto_gain": kwargs["auto_gain"],
             "muted": self.mute_audio.isChecked(),
+            "squelch": self.squelch_audio.isChecked(),
             "transcript": self.transcript_enabled.isChecked(),
         }
         self.start_audio_stream(settings)
@@ -570,6 +597,7 @@ class WavePilotWindow(QMainWindow):
                 "gain_tenths_db": kwargs["gain_tenths_db"],
                 "auto_gain": kwargs["auto_gain"],
                 "muted": self.mute_audio.isChecked(),
+                "squelch": self.squelch_audio.isChecked(),
                 "transcript": self.transcript_enabled.isChecked(),
             }
         self.audio_running = True
@@ -613,7 +641,18 @@ class WavePilotWindow(QMainWindow):
         self.peak_label.setText(f"Peak {payload['peak_hz'] / 1_000_000:.3f} MHz")
         self.strong_list.clear()
         for peak in payload.get("peaks", [])[:8]:
-            self.strong_list.addItem(f"{peak['mhz']:.3f} MHz   {peak['snr']:.1f} dB")
+            item = QListWidgetItem(f"{peak['mhz']:.3f} MHz   {peak['snr']:.1f} dB")
+            item.setData(Qt.UserRole, {"mhz": float(peak["mhz"]), "mode": self.mode.currentText()})
+            self.strong_list.addItem(item)
+
+    def activate_channel_item(self, item):
+        data = item.data(Qt.UserRole)
+        if not isinstance(data, dict):
+            return
+        mhz = float(data.get("mhz") or (float(data.get("hz", 0)) / 1_000_000.0))
+        if mhz <= 0:
+            return
+        self.tune(mhz, data.get("mode") or self.mode.currentText(), start_audio=True)
 
     def on_worker_result(self, tag, payload):
         if self.closing:
@@ -630,7 +669,16 @@ class WavePilotWindow(QMainWindow):
             self.scan_button.setEnabled(True)
             self.scan_list.clear()
             for item in payload.get("results", []):
-                self.scan_list.addItem(f"{item['mhz']:.4f} MHz   {item['name']}   {item['snr_db']:.1f} dB")
+                row = QListWidgetItem(f"{item['mhz']:.4f} MHz   {item['name']}   {item['snr_db']:.1f} dB")
+                row.setData(
+                    Qt.UserRole,
+                    {
+                        "mhz": float(item["mhz"]),
+                        "mode": item.get("mode") or self.mode.currentText(),
+                        "name": item.get("name", ""),
+                    },
+                )
+                self.scan_list.addItem(row)
             self.state_label.setText("Scan done")
         elif tag == "audio-spectrum":
             self.render_spectrum_payload(payload)
@@ -639,9 +687,10 @@ class WavePilotWindow(QMainWindow):
                 self.state_label.setText("Real-time")
                 seconds = float(payload.get("seconds", 0.0))
                 audio_state = "Muted" if payload.get("muted") else "Audio"
+                squelch_state = " | squelch" if payload.get("squelch") else ""
                 self.scope_meta.setText(
                     f"Real-time {audio_state.lower()} | {payload.get('mode', self.mode.currentText()).upper()} | "
-                    f"{payload.get('audio_rate', 48000) / 1000:.0f} kHz stream | {seconds:.1f}s"
+                    f"{payload.get('audio_rate', 48000) / 1000:.0f} kHz stream{squelch_state} | {seconds:.1f}s"
                 )
         elif tag == "audio-stopped":
             if not self.audio_running and not self.pending_audio_restart:

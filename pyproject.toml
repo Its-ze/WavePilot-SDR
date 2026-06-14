@@ -1,6 +1,6 @@
 [project]
 name = "wavepilot-sdr"
-version = "0.2.3"
+version = "0.2.4"
 description = "Local cross-platform RTL-SDR scanner and live listener"
 readme = "README.md"
 requires-python = ">=3.10"

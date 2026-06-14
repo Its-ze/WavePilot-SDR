@@ -9,7 +9,7 @@ WavePilot SDR is a native, cross-platform RTL-SDR scanner and live listener for 
 - WavePilot app icon and brand treatment across desktop, shortcuts, launchers, and Pages
 - Preset groups for NOAA weather, airband, FM broadcast, marine, ham, FRS/GMRS, MURS/business, and data channels
 - Scan mode for strongest preset hits
-- Real-time Listen Live mode for continuous WFM, NFM, and AM audio, with an in-app mute toggle
+- Real-time Listen Live mode for continuous WFM, NFM, and AM audio, with channel-select auto-listen plus Mute and Squelch controls
 - Offline live transcript panel for analog speech channels when the Vosk model is installed
 - In-app update check, install, and restart flow
 - Windows installer that can download public RTL-SDR runtime DLLs, the transcript model, and launch Zadig for WinUSB driver setup

@@ -1,11 +1,11 @@
 {
-  "latest_version": "0.2.3",
+  "latest_version": "0.2.4",
   "source_zip_url": "https://github.com/Its-ze/WavePilot-SDR/archive/refs/heads/main.zip",
   "release_page": "https://github.com/Its-ze/WavePilot-SDR",
   "commit": "main",
   "notes": [
-    "Adds an offline live transcript panel powered by the real-time audio stream.",
-    "Installer can download the public Vosk small English model for local speech recognition.",
-    "Update checks now surface the transcript release as WavePilot SDR 0.2.3."
+    "Preset channel selection can start Listen Live immediately.",
+    "Scan and strong-signal rows are now clickable tune-and-listen targets.",
+    "Listen Live now starts unmuted by default, with optional Mute and Squelch controls."
   ]
 }
