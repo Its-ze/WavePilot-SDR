@@ -1,6 +1,6 @@
 [project]
 name = "wavepilot-sdr"
-version = "0.2.0"
+version = "0.2.1"
 description = "Local cross-platform RTL-SDR scanner and live listener"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -19,4 +19,4 @@ wavepilot-sdr = "wavepilot.server:main"
 packages = ["wavepilot"]
 
 [tool.setuptools.package-data]
-wavepilot = ["static/*"]
+wavepilot = ["static/*", "assets/*"]

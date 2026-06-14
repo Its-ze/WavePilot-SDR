@@ -6,10 +6,11 @@ import argparse
 import math
 import wave
 from io import BytesIO
+from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Qt, Signal
-from PySide6.QtGui import QColor, QImage, QPainter, QPen
+from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -37,6 +38,10 @@ from . import __version__
 from .presets import PRESET_GROUPS
 from .radio import manager
 from .updater import UpdateError, apply_update, check_for_update, restart_application
+
+ASSETS_ROOT = Path(__file__).resolve().parent / "assets"
+APP_ICON = ASSETS_ROOT / "wavepilot-icon.png"
+BRAND_TAGLINE = "Signal scanner + live RF receiver"
 
 
 class WorkerSignals(QObject):
@@ -147,6 +152,8 @@ class WavePilotWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(f"WavePilot SDR {__version__}")
+        if APP_ICON.exists():
+            self.setWindowIcon(QIcon(str(APP_ICON)))
         self.resize(1320, 840)
         self.thread_pool = QThreadPool.globalInstance()
         self.spectrum_busy = False
@@ -176,12 +183,22 @@ class WavePilotWindow(QMainWindow):
         layout.setSpacing(12)
 
         top = QHBoxLayout()
+        logo = QLabel()
+        logo.setObjectName("BrandIcon")
+        if APP_ICON.exists():
+            pixmap = QPixmap(str(APP_ICON))
+            logo.setPixmap(pixmap.scaled(54, 54, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        logo.setFixedSize(58, 58)
+        top.addWidget(logo)
         title_box = QVBoxLayout()
         title = QLabel("WavePilot SDR")
         title.setObjectName("Title")
+        tagline = QLabel(BRAND_TAGLINE)
+        tagline.setObjectName("Tagline")
         self.device_label = QLabel("Checking receiver")
         self.device_label.setObjectName("Muted")
         title_box.addWidget(title)
+        title_box.addWidget(tagline)
         title_box.addWidget(self.device_label)
         top.addLayout(title_box, 1)
         self.state_label = QLabel("Starting")
@@ -311,8 +328,10 @@ class WavePilotWindow(QMainWindow):
         self.setStyleSheet(
             """
             QMainWindow, QWidget { background: #0b0d0f; color: #f3f7f2; font-family: Segoe UI, Arial; font-size: 13px; }
-            #Title { font-size: 30px; font-weight: 760; }
+            #Title { font-size: 31px; font-weight: 780; color: #f3f7f2; }
+            #Tagline { color: #42e8d2; font-size: 12px; font-weight: 720; letter-spacing: 1px; text-transform: uppercase; }
             #Muted { color: #a7b0aa; }
+            #BrandIcon { border: 1px solid #313a3e; border-radius: 10px; background: #0f1315; padding: 2px; }
             #PanelTitle { font-size: 15px; font-weight: 720; }
             #Pill, #PillMuted { border: 1px solid #313a3e; border-radius: 6px; padding: 7px 10px; background: #1c2225; min-width: 104px; }
             #PillMuted { color: #a7b0aa; }
@@ -581,6 +600,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Run WavePilot SDR desktop app")
     parser.parse_args(argv)
     app = QApplication([])
+    if APP_ICON.exists():
+        app.setWindowIcon(QIcon(str(APP_ICON)))
     window = WavePilotWindow()
     window.show()
     return app.exec()

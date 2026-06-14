@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>WavePilot SDR</title>
   <meta name="description" content="Native cross-platform RTL-SDR scanner and live listener with Windows and Linux installers.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <style>
     :root {
       --page: #0a0d10;
@@ -72,6 +73,13 @@
       font-weight: 700;
       text-transform: uppercase;
       font-size: 12px;
+    }
+
+    .hero-logo {
+      width: 82px;
+      height: 82px;
+      border-radius: 18px;
+      box-shadow: 0 16px 42px rgba(0, 0, 0, 0.32);
     }
 
     h1 {
@@ -189,6 +197,7 @@
   <header class="hero">
     <canvas id="scopeCanvas" width="1600" height="900" aria-hidden="true"></canvas>
     <div class="hero-content">
+      <img class="hero-logo" src="favicon.svg" alt="WavePilot SDR app icon">
       <div class="eyebrow">Native RTL-SDR scanner for Windows and Linux</div>
       <h1>WavePilot SDR</h1>
       <p class="subhead">Install the desktop receiver app, bind your RTL-SDR to the right driver, then scan preset channels, listen live, and update from inside the app.</p>
@@ -229,7 +238,7 @@ chmod +x scripts/*.sh
       <article class="card"><h3>Presets</h3><p>Weather, airband, FM, marine, ham, FRS/GMRS, MURS, business, data, and oddities.</p></article>
       <article class="card"><h3>Scan Mode</h3><p>Checks preset groups and ranks active signals by measured RF strength.</p></article>
       <article class="card"><h3>Listen Live</h3><p>Streams queued audio slices for WFM, NFM, and AM without blocking the desktop UI.</p></article>
-      <article class="card"><h3>In-App Updates</h3><p>Checks the public update manifest, installs app updates, and prompts for restart.</p></article>
+      <article class="card"><h3>App Branding</h3><p>Native window icon, desktop shortcuts, launchers, and Pages all use the WavePilot mark.</p></article>
     </div>
   </section>
 

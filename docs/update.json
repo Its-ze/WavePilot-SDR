@@ -1,11 +1,11 @@
 {
-  "latest_version": "0.2.0",
+  "latest_version": "0.2.1",
   "source_zip_url": "https://github.com/Its-ze/WavePilot-SDR/archive/refs/heads/main.zip",
   "release_page": "https://github.com/Its-ze/WavePilot-SDR",
   "commit": "main",
   "notes": [
-    "Native desktop app replaces the browser-based runtime.",
-    "Adds in-app update check, install, and restart controls.",
-    "Installer now launches WavePilot SDR as a desktop program."
+    "Adds the WavePilot brand mark and native app icon.",
+    "Desktop window, Windows shortcuts, Linux launcher, and Pages favicon now use the same icon.",
+    "Adds a branded desktop header with the WavePilot signal-scanner tagline."
   ]
 }

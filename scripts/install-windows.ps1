@@ -144,6 +144,7 @@ function Install-Shortcuts($Launcher) {
     if ($NoShortcut) { return }
     $target = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
     $args = "-NoProfile -ExecutionPolicy Bypass -File `"$Launcher`""
+    $icon = Join-Path $InstallDir "wavepilot\assets\wavepilot-icon.ico"
     $shell = New-Object -ComObject WScript.Shell
 
     $desktop = [Environment]::GetFolderPath("Desktop")
@@ -151,6 +152,7 @@ function Install-Shortcuts($Launcher) {
     $shortcut.TargetPath = $target
     $shortcut.Arguments = $args
     $shortcut.WorkingDirectory = $InstallDir
+    if (Test-Path -LiteralPath $icon) { $shortcut.IconLocation = $icon }
     $shortcut.Save()
 
     $programs = Join-Path ([Environment]::GetFolderPath("Programs")) "WavePilot SDR"
@@ -159,6 +161,7 @@ function Install-Shortcuts($Launcher) {
     $menu.TargetPath = $target
     $menu.Arguments = $args
     $menu.WorkingDirectory = $InstallDir
+    if (Test-Path -LiteralPath $icon) { $menu.IconLocation = $icon }
     $menu.Save()
 }
 

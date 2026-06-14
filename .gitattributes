@@ -10,3 +10,5 @@
 *.yml text eol=lf
 *.yaml text eol=lf
 *.toml text eol=lf
+*.ico binary
+*.png binary

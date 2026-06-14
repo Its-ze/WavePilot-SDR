@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 160" role="img" aria-labelledby="title desc">
+  <title id="title">WavePilot SDR wordmark</title>
+  <desc id="desc">WavePilot SDR wordmark with radio wave icon.</desc>
+  <rect width="680" height="160" fill="none"/>
+  <g transform="translate(12 12) scale(.53)">
+    <rect x="14" y="14" width="228" height="228" rx="52" fill="#0b0f12"/>
+    <path d="M38 157c25-45 43-45 66 0s42 45 67 0 32-45 47 0" fill="none" stroke="#42e8d2" stroke-width="12" stroke-linecap="round"/>
+    <path d="M128 43 183 195 128 167 73 195Z" fill="#e9fbf7" stroke="#f5f8f2" stroke-width="7" stroke-linejoin="round"/>
+    <circle cx="128" cy="128" r="11" fill="#0b1113" stroke="#f4c65b" stroke-width="5"/>
+  </g>
+  <text x="158" y="76" fill="#f3f7f2" font-family="Segoe UI, Arial, sans-serif" font-size="46" font-weight="760">WavePilot</text>
+  <text x="160" y="116" fill="#42e8d2" font-family="Segoe UI, Arial, sans-serif" font-size="25" font-weight="700" letter-spacing="3">SDR</text>
+  <path d="M217 124h358" stroke="#313a3e" stroke-width="3"/>
+</svg>

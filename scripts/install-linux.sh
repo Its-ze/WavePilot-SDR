@@ -109,7 +109,10 @@ RULES
 }
 
 install_launchers() {
-  mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications"
+  mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications" "$HOME/.local/share/icons/hicolor/512x512/apps"
+  if [ -f "$INSTALL_DIR/wavepilot/assets/wavepilot-icon.png" ]; then
+    cp "$INSTALL_DIR/wavepilot/assets/wavepilot-icon.png" "$HOME/.local/share/icons/hicolor/512x512/apps/wavepilot-sdr.png"
+  fi
   cat > "$HOME/.local/bin/wavepilot-sdr" <<EOF
 #!/usr/bin/env bash
 cd "$INSTALL_DIR"
@@ -122,6 +125,7 @@ EOF
 Name=WavePilot SDR
 Comment=RTL-SDR scanner and live listener
 Exec=$HOME/.local/bin/wavepilot-sdr
+Icon=wavepilot-sdr
 Terminal=false
 Type=Application
 Categories=AudioVideo;HamRadio;
