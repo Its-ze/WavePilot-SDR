@@ -1,14 +1,15 @@
 # WavePilot SDR
 
-WavePilot SDR is a local, cross-platform RTL-SDR scanner and live listener for Windows and Linux. It runs a small local web app on the computer with the SDR dongle attached, then opens a modern browser UI for presets, scanning, spectrum, waterfall, and live audio.
+WavePilot SDR is a native, cross-platform RTL-SDR scanner and live listener for Windows and Linux. It opens as a desktop app on the computer with the SDR dongle attached and provides presets, scanning, spectrum, waterfall, live audio, and in-app updates.
 
 ## Features
 
 - RTL-SDR receive path through `librtlsdr` / `rtlsdr.dll`
-- Modern local browser UI with live spectrum and waterfall
+- Native Qt desktop UI with live spectrum and waterfall
 - Preset groups for NOAA weather, airband, FM broadcast, marine, ham, FRS/GMRS, MURS/business, and data channels
 - Scan mode for strongest preset hits
 - Listen Live mode for WFM, NFM, and AM audio
+- In-app update check, install, and restart flow
 - Windows installer that can download public RTL-SDR runtime DLLs and launch Zadig for WinUSB driver setup
 - Linux installer that can install `rtl-sdr` packages and udev access rules
 
@@ -30,11 +31,7 @@ chmod +x scripts/install-linux.sh scripts/start-linux.sh
 ./scripts/start-linux.sh
 ```
 
-After startup, open:
-
-```text
-http://127.0.0.1:8795/
-```
+After startup, the WavePilot SDR desktop window opens directly.
 
 ## Windows Driver Notes
 
@@ -60,6 +57,16 @@ On Linux, the installer uses your package manager when allowed:
 
 The optional udev rule allows non-root access to common Realtek `0bda:2832` and `0bda:2838` SDR dongles. Unplug and replug the dongle after installing the rule.
 
+## In-App Updates
+
+Use the `Updates` button in the desktop app. Installed copies check:
+
+```text
+https://its-ze.github.io/WavePilot-SDR/update.json
+```
+
+When an update is available, WavePilot downloads the public GitHub source archive, refreshes managed app files, runs the Python dependency install step, and asks for a restart. In-app apply is disabled when running from a git checkout so development work is not overwritten.
+
 ## Source And Licenses
 
 WavePilot SDR is GPL-2.0-or-later so it remains compatible with the public RTL-SDR driver stack it uses at runtime.
@@ -71,7 +78,9 @@ Public dependency sources:
 - RTL-SDR Blog Windows driver releases: <https://github.com/rtlsdrblog/rtl-sdr-blog/releases>
 - Zadig/libwdi: <https://zadig.akeo.ie/> and <https://github.com/pbatard/libwdi>
 - NumPy: <https://numpy.org/>
+- PySide: <https://doc.qt.io/qtforpython-6/>
 - SciPy: <https://scipy.org/>
+- sounddevice: <https://python-sounddevice.readthedocs.io/>
 
 ## Legal
 

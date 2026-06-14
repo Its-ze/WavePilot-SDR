@@ -16,4 +16,5 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -r requirements.txt
       - run: python -m compileall wavepilot
-      - run: python -m wavepilot --help
+      - run: python -m wavepilot.server --help
+      - run: QT_QPA_PLATFORM=offscreen python -c "import wavepilot.desktop; import wavepilot.updater; print('desktop import ok')"

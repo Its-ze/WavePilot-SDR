@@ -45,13 +45,13 @@ install_system_packages() {
 
   if command -v apt-get >/dev/null 2>&1; then
     sudo apt-get update
-    sudo apt-get install -y python3 python3-venv python3-pip rtl-sdr librtlsdr0 libusb-1.0-0
+    sudo apt-get install -y python3 python3-venv python3-pip rtl-sdr librtlsdr0 libusb-1.0-0 portaudio19-dev
   elif command -v dnf >/dev/null 2>&1; then
-    sudo dnf install -y python3 python3-pip rtl-sdr rtl-sdr-devel libusb1
+    sudo dnf install -y python3 python3-pip rtl-sdr rtl-sdr-devel libusb1 portaudio
   elif command -v pacman >/dev/null 2>&1; then
-    sudo pacman -Sy --needed python python-pip rtl-sdr libusb
+    sudo pacman -Sy --needed python python-pip rtl-sdr libusb portaudio
   elif command -v zypper >/dev/null 2>&1; then
-    sudo zypper install -y python3 python3-pip rtl-sdr libusb-1_0-0
+    sudo zypper install -y python3 python3-pip rtl-sdr libusb-1_0-0 portaudio
   else
     say "No supported package manager found. Install rtl-sdr/librtlsdr and Python venv support manually."
   fi
@@ -122,7 +122,7 @@ EOF
 Name=WavePilot SDR
 Comment=RTL-SDR scanner and live listener
 Exec=$HOME/.local/bin/wavepilot-sdr
-Terminal=true
+Terminal=false
 Type=Application
 Categories=AudioVideo;HamRadio;
 EOF

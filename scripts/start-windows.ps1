@@ -1,7 +1,8 @@
 param(
     [int]$Port = 8795,
     [switch]$Public,
-    [switch]$NoOpen
+    [switch]$NoOpen,
+    [switch]$Web
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,9 +14,22 @@ if (-not (Test-Path -LiteralPath $python)) {
     exit 1
 }
 
-$args = @("-m", "wavepilot", "--port", "$Port")
-if ($Public) { $args += "--public" }
-if ($NoOpen) { $args += "--no-open" }
+$module = "wavepilot"
+$args = @("-m", $module)
+if ($Web) {
+    $args = @("-m", "wavepilot.server", "--port", "$Port")
+    if ($Public) { $args += "--public" }
+    if ($NoOpen) { $args += "--no-open" }
+}
 
 Set-Location -LiteralPath $root
-& $python @args
+if ($Web) {
+    & $python @args
+} else {
+    $pythonw = Join-Path $root ".venv\Scripts\pythonw.exe"
+    if (Test-Path -LiteralPath $pythonw) {
+        Start-Process -FilePath $pythonw -ArgumentList $args -WorkingDirectory $root
+    } else {
+        & $python @args
+    }
+}

@@ -129,7 +129,12 @@ function Write-Launcher($DestDir) {
     $content = @"
 `$ErrorActionPreference = "Stop"
 Set-Location -LiteralPath "$DestDir"
-& "$DestDir\.venv\Scripts\python.exe" -m wavepilot
+`$pythonw = "$DestDir\.venv\Scripts\pythonw.exe"
+if (Test-Path -LiteralPath `$pythonw) {
+    Start-Process -FilePath `$pythonw -ArgumentList @("-m", "wavepilot") -WorkingDirectory "$DestDir"
+} else {
+    & "$DestDir\.venv\Scripts\python.exe" -m wavepilot
+}
 "@
     Set-Content -LiteralPath $launcher -Value $content -Encoding UTF8
     return $launcher
