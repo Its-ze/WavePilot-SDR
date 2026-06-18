@@ -71,13 +71,13 @@ When an update is available, WavePilot downloads the public GitHub source archiv
 
 ## Dev Auto-Sync
 
-On a Windows development machine, you can keep the local checkout refreshed from GitHub with a scheduled fast-forward sync:
+On a Windows development machine, you can keep the local checkout synced with GitHub using a scheduled task:
 
 ```powershell
 .\scripts\install-windows-dev-autosync.ps1 -RunNow
 ```
 
-The task runs every five minutes by default and only pulls when the local branch is `main`, the working tree is clean, and Git can fast-forward safely. If local files changed or the branch diverged, it skips and writes a log to `%LOCALAPPDATA%\WavePilotSDR\dev-sync.log`.
+The task runs every five minutes by default. In `AutoCommitAndPush` mode it pulls safe fast-forward changes from GitHub, auto-commits local edits with a timestamp, and pushes them back to `main`. It never force-pushes; if local and remote changes diverge, it skips and writes a log to `%LOCALAPPDATA%\WavePilotSDR\dev-sync.log`. Because this repository is public, the sync script refuses to auto-publish common secret-looking paths such as `.env`, key files, and files with `secret`, `token`, or `password` in the path.
 
 ## Live Transcript
 

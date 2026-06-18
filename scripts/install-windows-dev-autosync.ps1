@@ -2,6 +2,8 @@ param(
     [string]$RepoPath = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
     [string]$TaskName = "WavePilot SDR Dev Auto Sync",
     [int]$Minutes = 5,
+    [ValidateSet("PullOnly", "PushCommitted", "AutoCommitAndPush")]
+    [string]$Mode = "AutoCommitAndPush",
     [switch]$RunNow
 )
 
@@ -20,7 +22,7 @@ if (-not (Test-Path -LiteralPath $SyncScript)) {
 $taskPath = "\WavePilot\"
 $escapedScript = $SyncScript.Replace('"', '\"')
 $escapedRepo = $RepoPath.Replace('"', '\"')
-$arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$escapedScript`" -RepoPath `"$escapedRepo`""
+$arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$escapedScript`" -RepoPath `"$escapedRepo`" -Mode $Mode"
 
 $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $arguments
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
@@ -37,7 +39,7 @@ Register-ScheduledTask `
     -Action $action `
     -Trigger $trigger `
     -Settings $settings `
-    -Description "Safely fast-forwards the WavePilot SDR dev repo from GitHub when the local worktree is clean." `
+    -Description "Safely syncs the WavePilot SDR dev repo with GitHub using mode $Mode." `
     -Force | Out-Null
 
 if ($RunNow) {
@@ -46,5 +48,6 @@ if ($RunNow) {
 
 Write-Host "[WavePilot] Installed scheduled task $taskPath$TaskName"
 Write-Host "[WavePilot] Sync interval: every $Minutes minute(s)"
+Write-Host "[WavePilot] Sync mode: $Mode"
 Write-Host "[WavePilot] Repo: $RepoPath"
 Write-Host "[WavePilot] Log: $env:LOCALAPPDATA\WavePilotSDR\dev-sync.log"
