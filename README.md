@@ -69,6 +69,16 @@ https://its-ze.github.io/WavePilot-SDR/update.json
 
 When an update is available, WavePilot downloads the public GitHub source archive, refreshes managed app files, runs the Python dependency install step, and asks for a restart. In-app apply is disabled when running from a git checkout so development work is not overwritten.
 
+## Dev Auto-Sync
+
+On a Windows development machine, you can keep the local checkout refreshed from GitHub with a scheduled fast-forward sync:
+
+```powershell
+.\scripts\install-windows-dev-autosync.ps1 -RunNow
+```
+
+The task runs every five minutes by default and only pulls when the local branch is `main`, the working tree is clean, and Git can fast-forward safely. If local files changed or the branch diverged, it skips and writes a log to `%LOCALAPPDATA%\WavePilotSDR\dev-sync.log`.
+
 ## Live Transcript
 
 WavePilot can transcribe analog speech from the same real-time audio stream used by Listen Live. The transcript is local/offline through Vosk and works best on clear WFM/NFM/AM voice signals. Encrypted, trunked, digital, or weak/noisy signals will not produce useful text.
