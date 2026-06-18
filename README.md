@@ -52,7 +52,7 @@ If Windows still shows the dongle as a TV/media device or with a driver error, r
 
 On Linux, the installer uses your package manager when allowed:
 
-- Debian/Ubuntu: `rtl-sdr`, `librtlsdr0`, `libusb-1.0-0`
+- Debian/Ubuntu/Pop!_OS: `rtl-sdr`, `librtlsdr2` on Noble/24.04 or `librtlsdr0` on older releases, `libusb-1.0-0`
 - Fedora: `rtl-sdr`, `rtl-sdr-devel`, `libusb1`
 - Arch: `rtl-sdr`, `libusb`
 - openSUSE: `rtl-sdr`, `libusb-1_0-0`

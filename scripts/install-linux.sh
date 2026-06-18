@@ -49,7 +49,25 @@ install_system_packages() {
 
   if command -v apt-get >/dev/null 2>&1; then
     sudo apt-get update
-    sudo apt-get install -y python3 python3-venv python3-pip rtl-sdr librtlsdr0 libusb-1.0-0 portaudio19-dev
+    sudo apt-get install -y python3 python3-venv python3-pip libusb-1.0-0 portaudio19-dev
+
+    local rtl_packages=()
+    if apt-cache show rtl-sdr >/dev/null 2>&1; then
+      rtl_packages+=(rtl-sdr)
+    else
+      say "APT package rtl-sdr is not available from the enabled repositories."
+    fi
+    for candidate in librtlsdr2 librtlsdr0; do
+      if apt-cache show "$candidate" >/dev/null 2>&1; then
+        rtl_packages+=("$candidate")
+        break
+      fi
+    done
+    if [ "${#rtl_packages[@]}" -gt 0 ]; then
+      sudo apt-get install -y "${rtl_packages[@]}"
+    else
+      say "No APT RTL-SDR runtime package was available; continuing with the Python app install."
+    fi
   elif command -v dnf >/dev/null 2>&1; then
     sudo dnf install -y python3 python3-pip rtl-sdr rtl-sdr-devel libusb1 portaudio
   elif command -v pacman >/dev/null 2>&1; then

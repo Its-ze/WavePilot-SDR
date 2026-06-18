@@ -28,7 +28,7 @@ Run:
 ./scripts/install-linux.sh --udev
 ```
 
-The installer can install system RTL-SDR packages and add udev rules for common Realtek devices:
+The installer can install system RTL-SDR packages and add udev rules for common Realtek devices. On Pop!_OS / Ubuntu Noble, the RTL-SDR library package is usually `librtlsdr2`; older Ubuntu/Debian releases may still use `librtlsdr0`.
 
 - `0bda:2832`
 - `0bda:2838`

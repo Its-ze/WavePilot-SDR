@@ -1,11 +1,11 @@
 {
-  "latest_version": "0.2.5",
+  "latest_version": "0.2.6",
   "source_zip_url": "https://github.com/Its-ze/WavePilot-SDR/archive/refs/heads/main.zip",
   "release_page": "https://github.com/Its-ze/WavePilot-SDR",
   "commit": "main",
   "notes": [
-    "Cleaner native desktop layout with grouped Receiver, Audio, and Actions controls.",
-    "Improved preset, signal, scan, and transcript panel spacing.",
-    "Startup now applies a reliable app font fallback for cleaner rendering."
+    "Linux installer now supports Pop!_OS / Ubuntu Noble where the RTL-SDR runtime package is librtlsdr2.",
+    "APT installs Python and audio prerequisites before optional RTL-SDR distro packages so a package rename does not block venv creation.",
+    "scripts/start-linux.sh now falls back to the installed app directory when the repository checkout does not contain a local .venv."
   ]
 }
