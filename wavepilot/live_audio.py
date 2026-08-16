@@ -8,7 +8,7 @@ from contextlib import nullcontext
 
 import numpy as np
 
-from .dsp import demodulate_audio, rf_score, should_squelch, spectrum_payload
+from .dsp import channel_rf_score, demodulate_audio, rf_score, should_squelch, spectrum_payload
 from .radio import manager
 from .transcript import LiveTranscriber, TranscriptUnavailable, transcript_status
 
@@ -20,7 +20,9 @@ def receiver_sample_rate(mode: str) -> int:
 
 
 def receiver_chunk_samples(mode: str) -> int:
-    return 32_768 if (mode or "").lower() == "wfm" else 8_192
+    # Longer voice blocks greatly reduce audible filter/discriminator boundary
+    # transients while remaining comfortably below interactive latency.
+    return 32_768
 
 
 def _condition_audio(audio: np.ndarray, gain_scale: float) -> tuple[np.ndarray, float]:
@@ -30,9 +32,9 @@ def _condition_audio(audio: np.ndarray, gain_scale: float) -> tuple[np.ndarray, 
 
     audio -= float(np.mean(audio))
     rms = float(np.sqrt(np.mean(audio * audio)))
-    desired = 0.14 / max(rms, 0.0008)
-    desired = max(0.4, min(42.0, desired))
-    gain_scale = gain_scale * 0.88 + desired * 0.12
+    desired = 0.10 / max(rms, 0.002)
+    desired = max(0.35, min(12.0, desired))
+    gain_scale = gain_scale * 0.94 + desired * 0.06
     return np.clip(audio * gain_scale, -0.96, 0.96).astype(np.float32, copy=False), gain_scale
 
 
@@ -147,7 +149,12 @@ def stream_audio(
 
             now = time.monotonic()
             if chunks % 3 == 0:
-                last_rf = rf_score(samples[: min(len(samples), 32768)])
+                score_samples = samples[: min(len(samples), 32768)]
+                last_rf = (
+                    channel_rf_score(score_samples, sample_rate)
+                    if mode == "nfm"
+                    else rf_score(score_samples)
+                )
 
             audio = demodulate_audio(samples, sample_rate, mode)
             rf_squelched = should_squelch(audio, last_rf, mode)

@@ -78,6 +78,22 @@ def rf_score(samples: np.ndarray):
     }
 
 
+def channel_rf_score(samples: np.ndarray, sample_rate: int, bandwidth_hz=8_000):
+    """Score only the tuned channel, ignoring strong adjacent signals."""
+    samples = np.asarray(samples)
+    fft_size = min(4096, len(samples))
+    if fft_size < 1024:
+        return {"snr_db": 0.0, "peak_db": 0.0, "floor_db": 0.0}
+    windowed = samples[:fft_size] * np.hanning(fft_size)
+    db = 20.0 * np.log10(np.abs(np.fft.fftshift(np.fft.fft(windowed))) + 1e-9)
+    hz = np.linspace(-sample_rate / 2, sample_rate / 2, fft_size, endpoint=False)
+    channel = np.abs(hz) <= float(bandwidth_hz)
+    reference = (np.abs(hz) >= float(bandwidth_hz) * 1.8) & (np.abs(hz) <= min(sample_rate * 0.42, 60_000))
+    peak = float(np.percentile(db[channel], 96))
+    floor = float(np.median(db[reference])) if np.any(reference) else float(np.median(db))
+    return {"snr_db": peak - floor, "peak_db": peak, "floor_db": floor}
+
+
 def fm_discriminator(samples: np.ndarray):
     shifted = samples[1:] * np.conj(samples[:-1])
     return np.angle(shifted).astype(np.float32)
@@ -92,6 +108,12 @@ def am_envelope(samples: np.ndarray):
 def lowpass(audio: np.ndarray, sample_rate: int, cutoff_hz: int):
     sos = signal.butter(5, cutoff_hz, "lowpass", fs=sample_rate, output="sos")
     return signal.sosfilt(sos, audio).astype(np.float32)
+
+
+def lowpass_iq(samples: np.ndarray, sample_rate: int, cutoff_hz: int):
+    """Keep only the selected channel before FM discrimination."""
+    sos = signal.butter(6, cutoff_hz, "lowpass", fs=sample_rate, output="sos")
+    return signal.sosfilt(sos, samples).astype(np.complex64)
 
 
 def highpass(audio: np.ndarray, sample_rate: int, cutoff_hz: int):
@@ -116,6 +138,11 @@ def demodulate_audio(samples: np.ndarray, sample_rate: int, mode: str):
     if mode == "am":
         demod = am_envelope(samples)
     else:
+        if mode == "nfm":
+            # A discriminator hears every signal in the sampled bandwidth unless
+            # the desired narrow channel is isolated first. Land-mobile NFM fits
+            # comfortably in an 8 kHz baseband channel.
+            samples = lowpass_iq(samples, sample_rate, min(8_000, sample_rate // 4))
         demod = fm_discriminator(samples)
         if mode == "wfm":
             demod = lowpass(demod, sample_rate, min(120_000, sample_rate // 3))
@@ -131,8 +158,9 @@ def demodulate_audio(samples: np.ndarray, sample_rate: int, mode: str):
         audio = highpass(audio, 48_000, 250)
         audio = lowpass(audio, 48_000, 4_000)
     else:
-        audio = highpass(audio, 48_000, 90)
-        audio = lowpass(audio, 48_000, 4_800)
+        audio = deemphasis(audio, 48_000, tau=300e-6)
+        audio = highpass(audio, 48_000, 180)
+        audio = lowpass(audio, 48_000, 3_600)
 
     if len(audio):
         audio -= float(np.mean(audio))
@@ -161,7 +189,7 @@ def should_squelch(audio: np.ndarray, rf: dict, mode: str):
     flatness = float(metrics.get("flatness", 1.0))
     if mode == "wfm":
         return snr < 4.0 or rms < 0.002
-    return snr < 6.0 or rms < 0.003 or flatness > 0.62
+    return snr < 9.0 or rms < 0.003 or flatness > 0.62
 
 
 def pcm_wav(audio: np.ndarray, sample_rate=48_000):

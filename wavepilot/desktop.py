@@ -309,7 +309,7 @@ class WavePilotWindow(QMainWindow):
         self.auto_listen = QCheckBox("Auto listen")
         self.auto_listen.setChecked(True)
         self.squelch_audio = QCheckBox("Squelch")
-        self.squelch_audio.setChecked(False)
+        self.squelch_audio.setChecked(True)
         self.transcript_enabled = QCheckBox("Transcript")
         self.transcript_enabled.setChecked(True)
         self.gain = QDoubleSpinBox()
@@ -637,6 +637,9 @@ class WavePilotWindow(QMainWindow):
         finally:
             self.suppress_receiver_change = False
         self.spectrum.bins = []
+        self.strong_list.clear()
+        self.peak_label.setText("Peak --")
+        self.scope_meta.setText(f"Tuned {float(mhz):.4f} MHz | {mode.upper()}")
         self.state_label.setText("Listening" if start_audio or was_listening else "Tuned")
         if not was_listening:
             if start_audio:
@@ -886,13 +889,20 @@ class WavePilotWindow(QMainWindow):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Run WavePilot SDR desktop app")
-    parser.parse_args(argv)
+    parser.add_argument("--frequency", type=float, metavar="MHZ", help="initial receive frequency in MHz")
+    parser.add_argument("--mode", choices=("nfm", "wfm", "am"), default="nfm", help="initial demodulation mode")
+    parser.add_argument("--listen", action="store_true", help="start live audio after tuning")
+    args = parser.parse_args(argv)
+    if args.frequency is not None and not 24.0 <= args.frequency <= 1766.0:
+        parser.error("--frequency must be between 24 and 1766 MHz")
     app = QApplication([])
     configure_app_font(app)
     if APP_ICON.exists():
         app.setWindowIcon(QIcon(str(APP_ICON)))
     window = WavePilotWindow()
     window.show()
+    if args.frequency is not None:
+        QTimer.singleShot(100, lambda: window.tune(args.frequency, args.mode, start_audio=args.listen))
     return app.exec()
 
 
