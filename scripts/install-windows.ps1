@@ -118,7 +118,7 @@ function Install-Zadig {
     try {
         $assetUrl = Get-GitHubAssetUrl "pbatard/libwdi" "(?i)zadig-.*\.exe$"
     } catch {
-        $assetUrl = "https://zadig.akeo.ie/downloads/zadig-2.9.exe"
+        $assetUrl = "https://github.com/pbatard/libwdi/releases/download/v1.5.1/zadig-2.9.exe"
     }
     Invoke-Download $assetUrl $zadig
 
