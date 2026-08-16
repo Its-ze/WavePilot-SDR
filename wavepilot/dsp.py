@@ -133,6 +133,49 @@ def deemphasis(audio: np.ndarray, sample_rate: int, tau=75e-6):
     return out
 
 
+class NfmStreamDemodulator:
+    """Stateful narrow-FM voice decoder for seamless real-time blocks."""
+
+    def __init__(self, sample_rate=240_000, audio_rate=48_000):
+        if int(sample_rate) % int(audio_rate) != 0:
+            raise ValueError("NFM stream sample rate must be an integer multiple of audio rate")
+        self.sample_rate = int(sample_rate)
+        self.audio_rate = int(audio_rate)
+        self.decimation = self.sample_rate // self.audio_rate
+        self.rf_sos = signal.butter(6, 8_000, "lowpass", fs=self.sample_rate, output="sos")
+        self.rf_state = np.zeros((len(self.rf_sos), 2), dtype=np.complex64)
+        self.voice_sos = signal.butter(4, (180, 3_600), "bandpass", fs=self.sample_rate, output="sos")
+        self.voice_state = np.zeros((len(self.voice_sos), 2), dtype=np.float64)
+        alpha = (1.0 / self.sample_rate) / (300e-6 + (1.0 / self.sample_rate))
+        self.deemphasis_b = np.asarray([alpha], dtype=np.float64)
+        self.deemphasis_a = np.asarray([1.0, -(1.0 - alpha)], dtype=np.float64)
+        self.deemphasis_state = np.zeros(1, dtype=np.float64)
+        self.previous_iq = None
+        self.decimation_phase = 0
+
+    def process(self, samples: np.ndarray):
+        samples = np.asarray(samples, dtype=np.complex64)
+        if not len(samples):
+            return np.empty(0, dtype=np.float32)
+        channel, self.rf_state = signal.sosfilt(self.rf_sos, samples, zi=self.rf_state)
+        if self.previous_iq is None:
+            pairs = channel[1:] * np.conj(channel[:-1])
+        else:
+            pairs = np.empty(len(channel), dtype=np.complex64)
+            pairs[0] = channel[0] * np.conj(self.previous_iq)
+            pairs[1:] = channel[1:] * np.conj(channel[:-1])
+        self.previous_iq = channel[-1]
+        demod = np.angle(pairs).astype(np.float64)
+        demod, self.deemphasis_state = signal.lfilter(
+            self.deemphasis_b, self.deemphasis_a, demod, zi=self.deemphasis_state
+        )
+        voice, self.voice_state = signal.sosfilt(self.voice_sos, demod, zi=self.voice_state)
+        start = (-self.decimation_phase) % self.decimation
+        audio = voice[start:: self.decimation]
+        self.decimation_phase = (self.decimation_phase + len(voice)) % self.decimation
+        return audio.astype(np.float32, copy=False)
+
+
 def demodulate_audio(samples: np.ndarray, sample_rate: int, mode: str):
     mode = (mode or "nfm").lower()
     if mode == "am":

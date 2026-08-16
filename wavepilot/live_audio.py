@@ -8,15 +8,32 @@ from contextlib import nullcontext
 
 import numpy as np
 
-from .dsp import channel_rf_score, demodulate_audio, rf_score, should_squelch, spectrum_payload
+from .dsp import NfmStreamDemodulator, channel_rf_score, demodulate_audio, rf_score, should_squelch, spectrum_payload
 from .radio import manager
 from .transcript import LiveTranscriber, TranscriptUnavailable, transcript_status
 
 AUDIO_SAMPLE_RATE = 48_000
 
 
+def select_output_device(sd):
+    """Prefer Windows' native WASAPI default over legacy MME resampling."""
+    try:
+        for hostapi in sd.query_hostapis():
+            if "WASAPI" not in str(hostapi.get("name", "")).upper():
+                continue
+            index = int(hostapi.get("default_output_device", -1))
+            if index >= 0:
+                device = sd.query_devices(index)
+                return index, str(device.get("name") or f"device {index}")
+    except Exception:
+        pass
+    index = int(sd.default.device[1])
+    device = sd.query_devices(index)
+    return index, str(device.get("name") or f"device {index}")
+
+
 def receiver_sample_rate(mode: str) -> int:
-    return 1_024_000 if (mode or "").lower() == "wfm" else 250_000
+    return 1_024_000 if (mode or "").lower() == "wfm" else 240_000
 
 
 def receiver_chunk_samples(mode: str) -> int:
@@ -33,8 +50,11 @@ def _condition_audio(audio: np.ndarray, gain_scale: float) -> tuple[np.ndarray, 
     audio -= float(np.mean(audio))
     rms = float(np.sqrt(np.mean(audio * audio)))
     desired = 0.10 / max(rms, 0.002)
-    desired = max(0.35, min(12.0, desired))
-    gain_scale = gain_scale * 0.94 + desired * 0.06
+    desired = max(0.35, min(2.0, desired))
+    # Turn down overloads quickly, but raise quiet audio slowly. Symmetric slow
+    # leveling makes receiver noise audibly "breathe" or pulse.
+    blend = 0.45 if desired < gain_scale else 0.025
+    gain_scale = gain_scale * (1.0 - blend) + desired * blend
     return np.clip(audio * gain_scale, -0.96, 0.96).astype(np.float32, copy=False), gain_scale
 
 
@@ -66,8 +86,10 @@ def stream_audio(
     squelch = bool(squelch)
     if not muted and volume > 0:
         import sounddevice as sd
+        output_device, output_device_name = select_output_device(sd)
     else:
         sd = None
+        output_device, output_device_name = None, "Muted"
     transcriber_state = {"engine": None}
     transcriber_lock = threading.Lock()
     if transcript:
@@ -104,12 +126,14 @@ def stream_audio(
     sample_rate = receiver_sample_rate(mode)
     chunk_samples = receiver_chunk_samples(mode)
     radio = manager.get()
-    gain_scale = 4.0 if mode == "wfm" else 9.0
+    gain_scale = 2.0
     last_rf = {"snr_db": 0.0, "peak_db": 0.0, "floor_db": 0.0}
     last_spectrum = 0.0
     last_status = 0.0
     chunks = 0
+    underflows = 0
     started = time.monotonic()
+    nfm_demodulator = NfmStreamDemodulator(sample_rate, AUDIO_SAMPLE_RATE) if mode == "nfm" else None
 
     with radio.lock:
         radio.configure(
@@ -121,7 +145,14 @@ def stream_audio(
         radio.lib.rtlsdr_reset_buffer(radio.dev)
 
     stream_context = (
-        sd.OutputStream(samplerate=AUDIO_SAMPLE_RATE, channels=1, dtype="float32", latency="low")
+        sd.OutputStream(
+            device=output_device,
+            samplerate=AUDIO_SAMPLE_RATE,
+            channels=1,
+            dtype="float32",
+            latency="high",
+            blocksize=0,
+        )
         if sd is not None
         else nullcontext(None)
     )
@@ -138,6 +169,8 @@ def stream_audio(
                     "muted": muted or volume <= 0,
                     "volume": volume,
                     "squelch": squelch,
+                    "output_device": output_device_name,
+                    "underflows": underflows,
                     "chunks": chunks,
                     "seconds": 0.0,
                 }
@@ -156,7 +189,7 @@ def stream_audio(
                     else rf_score(score_samples)
                 )
 
-            audio = demodulate_audio(samples, sample_rate, mode)
+            audio = nfm_demodulator.process(samples) if nfm_demodulator is not None else demodulate_audio(samples, sample_rate, mode)
             rf_squelched = should_squelch(audio, last_rf, mode)
             if squelch and rf_squelched:
                 audio = np.zeros_like(audio)
@@ -173,7 +206,8 @@ def stream_audio(
             if stream is not None and len(audio):
                 if volume != 1.0:
                     audio = np.clip(audio * volume, -0.96, 0.96).astype(np.float32, copy=False)
-                stream.write(audio.reshape(-1, 1))
+                if stream.write(audio.reshape(-1, 1)):
+                    underflows += 1
 
             chunks += 1
             if on_spectrum and now - last_spectrum >= 0.34:
@@ -202,6 +236,8 @@ def stream_audio(
                         "muted": muted or volume <= 0,
                         "volume": volume,
                         "squelch": squelch,
+                        "output_device": output_device_name,
+                        "underflows": underflows,
                         "chunks": chunks,
                         "seconds": max(0.0, now - started),
                     }
@@ -225,6 +261,8 @@ def stream_audio(
                 "muted": muted or volume <= 0,
                 "volume": volume,
                 "squelch": squelch,
+                "output_device": output_device_name,
+                "underflows": underflows,
                 "chunks": chunks,
                 "seconds": max(0.0, time.monotonic() - started),
             }

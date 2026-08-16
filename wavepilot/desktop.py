@@ -303,20 +303,20 @@ class WavePilotWindow(QMainWindow):
             self.sample_rate.addItem(label, value)
         self.sample_rate.setMinimumWidth(132)
         self.auto_gain = QCheckBox("Auto gain")
-        self.auto_gain.setChecked(True)
+        self.auto_gain.setChecked(False)
         self.mute_audio = QCheckBox("Mute")
         self.mute_audio.setChecked(False)
         self.auto_listen = QCheckBox("Auto listen")
         self.auto_listen.setChecked(True)
         self.squelch_audio = QCheckBox("Squelch")
-        self.squelch_audio.setChecked(True)
+        self.squelch_audio.setChecked(False)
         self.transcript_enabled = QCheckBox("Transcript")
         self.transcript_enabled.setChecked(True)
         self.gain = QDoubleSpinBox()
         self.gain.setRange(0.0, 49.6)
         self.gain.setSingleStep(0.1)
-        self.gain.setValue(28.0)
-        self.gain.setEnabled(False)
+        self.gain.setValue(7.7)
+        self.gain.setEnabled(True)
         self.gain.setMinimumWidth(104)
         self.auto_gain.toggled.connect(self.gain.setDisabled)
         self.freq.valueChanged.connect(self.receiver_settings_changed)
@@ -786,7 +786,8 @@ class WavePilotWindow(QMainWindow):
                 squelch_state = " | squelch" if payload.get("squelch") else ""
                 self.scope_meta.setText(
                     f"Real-time {audio_state.lower()} | {payload.get('mode', self.mode.currentText()).upper()} | "
-                    f"{payload.get('audio_rate', 48000) / 1000:.0f} kHz stream{squelch_state} | {seconds:.1f}s"
+                    f"{payload.get('audio_rate', 48000) / 1000:.0f} kHz stream{squelch_state} | "
+                    f"{payload.get('output_device', 'default output')} | underruns {payload.get('underflows', 0)} | {seconds:.1f}s"
                 )
         elif tag == "audio-stopped":
             if not self.audio_running and not self.pending_audio_restart:

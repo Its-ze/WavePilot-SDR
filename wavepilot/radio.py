@@ -158,7 +158,7 @@ class RtlSdrDevice:
             changed = changed or center_hz != self.center_hz
             self.center_hz = center_hz
         if sample_rate is not None:
-            sample_rate = max(250_000, min(2_400_000, int(sample_rate)))
+            sample_rate = max(225_000, min(2_400_000, int(sample_rate)))
             changed = changed or sample_rate != self.sample_rate
             self.sample_rate = sample_rate
         if auto_gain is not None:
